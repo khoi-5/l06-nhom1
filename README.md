@@ -1,4 +1,4 @@
-# inclucde/aio.h
+# include/aio.h
 #define MY_AIO_USERNAME  "Ten_nguoi_dung_Adafruit_IO"     
 #define MY_AIO_KEY       "Khoa_API_Adafruit_IO_cua_ban"   
 
