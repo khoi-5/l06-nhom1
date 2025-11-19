@@ -55,11 +55,14 @@ Hệ thống gồm 3 phần chính:
 └── .gitignore                             # Bỏ qua file nhạy cảm & node_modules
 
 ## 3. cấu hình iot
+```c
 // ======= Adafruit IO =======
-#define MY_AIO_USERNAME  "Ten_nguoi_dung_Adafruit_IO"      // ví dụ: "khoi5"
-#define MY_AIO_KEY       "Khoa_API_Adafruit_IO_cua_ban"    // dạng "aio_xxx..."
+#define MY_AIO_USERNAME  "Ten_nguoi_dung_Adafruit_IO"       // ví dụ: "khoi5"
+#define MY_AIO_KEY       "Khoa_API_Adafruit_IO_cua_ban"     // dạng "aio_xxx..."
+
 
 ## 4. cấu hình be
+```ini
 # Môi trường
 NODE_ENV=development
 PORT=5000
@@ -79,6 +82,9 @@ AIO_FEED_LIGHT=light
 AIO_FEED_LED=led
 AIO_FEED_LIGHT_CONTROL=light_control
 AIO_FEED_ENV_CONTROL=humidity_temperature_control
+
+# CORS cho frontend
+CLIENT_URL=http://localhost:5173
 
 # CORS cho frontend
 CLIENT_URL=http://localhost:5173
