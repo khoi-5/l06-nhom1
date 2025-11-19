@@ -52,11 +52,16 @@ String topicEnvCtrl   = baseTopic + FEED_ENV_CTRL;
 bool g_lightEnable = true;   // điều khiển feed light
 bool g_envEnable   = true;   // điều khiển feed temperature + humidity
 
+
+
 // ========= MQTT reconnect =========
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection to Adafruit IO... ");
+    
+    // Tạo Client ID bằng MAC Address + Số ngẫu nhiên
     String clientId = "ESP32Client-" + String((uint32_t)ESP.getEfuseMac(), HEX);
+    clientId += String(random(0xffff), HEX); // <--- DÒNG ĐÃ THÊM
 
     if (client.connect(clientId.c_str(), AIO_USERNAME, AIO_KEY)) {
       Serial.println("connected!");
@@ -72,7 +77,8 @@ void reconnect() {
     } else {
       Serial.print("failed, rc="); Serial.print(client.state());
       Serial.println(" retry in 5 seconds");
-      delay(5000);
+      // Dùng vTaskDelay() thay vì delay() để tuân thủ FreeRTOS
+      vTaskDelay(pdMS_TO_TICKS(5000));
     }
   }
 }
@@ -144,7 +150,7 @@ void coreiot_task(void *pvParameters) {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
-  const TickType_t delayTicks = pdMS_TO_TICKS(push_waiting_time * 1000); // 10s
+  const TickType_t delayTicks = pdMS_TO_TICKS(PUSHED_WAITING_TIME * 1000); // 10s
 
   while (1) {
     if (!client.connected()) {

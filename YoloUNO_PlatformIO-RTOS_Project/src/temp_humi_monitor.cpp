@@ -39,7 +39,7 @@ void temp_humi_monitor(void *pvParameters){
         Serial.print(temperature);
         Serial.println("°C");
         
-        vTaskDelay(collected_waiting_time * 1000);
+        vTaskDelay(COLLECTED_WAITING_TIME * 1000);
     }
     
 }

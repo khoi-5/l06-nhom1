@@ -10,5 +10,3 @@ String wifi_password= "ACLAB2023";
 boolean isWifiConnected = false;
 SemaphoreHandle_t xBinarySemaphoreInternet = xSemaphoreCreateBinary();
 
-int collected_waiting_time = 5;
-int push_waiting_time = 5;

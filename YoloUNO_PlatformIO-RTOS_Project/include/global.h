@@ -18,7 +18,8 @@ extern String wifi_password;
 extern boolean isWifiConnected;
 extern SemaphoreHandle_t xBinarySemaphoreInternet;
 
-extern int collected_waiting_time;
-extern int push_waiting_time;
+#define COLLECTED_WAITING_TIME 5
+#define PUSHED_WAITING_TIME 10
+
 
 #endif
