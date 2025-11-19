@@ -1,5 +1,6 @@
 #include <WiFi.h>
 #include "coreiot.h"
+#include "aio.h"
 #include <PubSubClient.h>
 
 // ========= Cấu hình Wi-Fi =========
@@ -8,8 +9,8 @@
 // ========= Adafruit IO =========
 const char* AIO_SERVER    = "io.adafruit.com";
 const int   mqttPort      = 1883;                    // test nhanh non-TLS
-const char* AIO_USERNAME  = "";
-const char* AIO_KEY       = "";
+const char* AIO_USERNAME  = MY_AIO_USERNAME; 
+const char* AIO_KEY = MY_AIO_KEY;
 
 // ========= Tên feed =========
 // Sensor
@@ -143,7 +144,7 @@ void coreiot_task(void *pvParameters) {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
-  const TickType_t delayTicks = pdMS_TO_TICKS(10000); // 10s
+  const TickType_t delayTicks = pdMS_TO_TICKS(push_waiting_time * 1000); // 10s
 
   while (1) {
     if (!client.connected()) {

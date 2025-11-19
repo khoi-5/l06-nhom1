@@ -1,6 +1,8 @@
-# Ngăn chặn file chứa biến môi trường (Secrets)
+
 /adafruit-realtime/be/.env
 
-# Ngăn chặn các thư mục Node Modules trong cả FE và BE
+
 /adafruit-realtime/be/node_modules/
 /adafruit-realtime/fe/node_modules/
+
+/YoloUNO_PlatformIO-RTOS_Project/include/aio.h
