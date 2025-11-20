@@ -4,24 +4,17 @@
 
 
 # Môi trường
-NODE_ENV=development
-PORT=5000
+AIO_USERNAME= username
+AIO_KEY=aio_key
 
+FEED_TEMP=temperature
+FEED_HUMID=humidity
+FEED_LIGHT=light
 
-MONGO_URI=mongodb://localhost:27017/adafruit_realtime
+FEED_LED=led
+FEED_LIGHT_CTRL=light_control
+FEED_HT_CTRL=humidity_temperature_control
 
-
-AIO_USERNAME=your_name
-AIO_KEY=aio_xxx_your_key_here
-AIO_BASE_URL=[https://io.adafruit.com/api/v2](https://io.adafruit.com/api/v2)
-
-
-AIO_FEED_TEMP=temperature
-AIO_FEED_HUMIDITY=humidity
-AIO_FEED_LIGHT=light
-AIO_FEED_LED=led
-AIO_FEED_LIGHT_CONTROL=light_control
-AIO_FEED_ENV_CONTROL=humidity_temperature_control
-
-
-CLIENT_URL=http://localhost:5173
+PORT=3001
+MQTT_URL=mqtt://io.adafruit.com
+MQTT_PORT=1883
