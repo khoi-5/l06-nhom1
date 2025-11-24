@@ -1,6 +1,20 @@
 #include "neo_blinky.h"
 
 
+
+void neo_toggle(int red, int green, int blue, bool control_singal){
+
+    Adafruit_NeoPixel strip(LED_COUNT, NEO_PIN, NEO_GRB + NEO_KHZ800);
+    strip.begin();
+    // Set all pixels to off to start
+    strip.clear();
+    strip.show();
+
+    if (control_singal) strip.setPixelColor(0, strip.Color(red, green, blue));   
+    else strip.clear();
+    strip.show();
+}
+
 void neo_blinky(void *pvParameters){
 
     Adafruit_NeoPixel strip(LED_COUNT, NEO_PIN, NEO_GRB + NEO_KHZ800);
