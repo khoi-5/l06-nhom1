@@ -22,6 +22,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   Serial.print("MQTT msg ["); Serial.print(t); Serial.print("] ");
   Serial.println(msg);
+  Serial.print(" ");
 
   // ===== LED1 ON/OFF (chuỗi "ON"/"OFF") =====
   if (t.endsWith("/" + String(FEED_LED))) {
@@ -29,9 +30,11 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (msg == "ON" || msg == "1") {
       digitalWrite(LED_PIN, HIGH);
       Serial.println("LED1: ON");
+      Serial.print(" ");
     } else {
       digitalWrite(LED_PIN, LOW);
       Serial.println("LED1: OFF");
+      Serial.print(" ");
     }
   }
 
@@ -42,6 +45,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (err) {
       Serial.print("HTL_CTRL JSON error: ");
       Serial.println(err.c_str());
+      Serial.print(" ");
       return;
     }
 
@@ -57,6 +61,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
     Serial.printf("Sensor enable -> T:%d H:%d L:%d\n",
                   g_tempEnable, g_humidEnable, g_lightEnable);
+    Serial.print(" ");
   }
 
   // ===== LED Neo: {"r":..,"g":..,"b":..,"on":0/1} =====
@@ -64,6 +69,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     StaticJsonDocument<128> doc;
     if (deserializeJson(doc, msg)) {
       Serial.println("LED_NEO JSON error");
+      Serial.print(" ");
       return;
     }
     int r = doc["r"] | 0;
@@ -76,6 +82,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     b = constrain(b, 0, 255);
 
     Serial.printf("LED_NEO -> on=%d R=%d G=%d B=%d\n", on, r, g, b);
+    Serial.print(" ");
     neo_toggle(on ? r : 0, on ? g : 0, on ? b : 0, on);
   }
 
@@ -85,8 +92,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (sec >= 5 && sec <= 300) {       // 5–300 giây
       chu_ky = sec;
       Serial.printf("Updated chu_ky = %u s\n", chu_ky);
+      Serial.print(" ");
     } else {
       Serial.println("chu_ky out of range");
+      Serial.print(" ");
     }
   }
 
@@ -95,6 +104,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     StaticJsonDocument<192> doc;
     if (deserializeJson(doc, msg)) {
       Serial.println("WIFI JSON error");
+      Serial.print(" ");
       return;
     }
     const char* s = doc["ssid"] | "";
@@ -104,6 +114,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       wifi_ssid = String(s);
       wifi_password = String(p);
       Serial.printf("New WiFi cfg -> SSID=%s\n", wifi_ssid.c_str());
+      Serial.print(" ");
       connectToWiFi();   // dùng lại hàm bên mainserver
     }
   }

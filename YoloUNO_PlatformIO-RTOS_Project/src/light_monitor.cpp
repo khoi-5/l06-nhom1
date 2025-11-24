@@ -45,7 +45,7 @@ void light_monitor(void* pvParameters){
             Serial.print(windowSamples);
             Serial.print(" samples): ");
             Serial.println(avgLightInt);
-            Serial.println("\n");
+            Serial.println(" ");
         }
 
         vTaskDelay(pdMS_TO_TICKS(SAMPLE_PERIOD * 1000));

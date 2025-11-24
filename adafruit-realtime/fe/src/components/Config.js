@@ -1,24 +1,37 @@
-// src/components/Config.jsx
-import React, { useEffect, useState } from "react";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import {
-  faLightbulb,
-  faSliders,
-  faWifi,
-} from "@fortawesome/free-solid-svg-icons";
-import { getSocket } from "../socket";
+import React, { useEffect, useState, useCallback } from "react";
+// FIX: Thay thế FontAwesome bằng Lucide React (đã được tích hợp)
+import { Lightbulb, SlidersHorizontal, Wifi } from "lucide-react";
 
+// =====================================================================
+// FIX: Tích hợp logic Socket Mock để giải quyết lỗi import "../socket"
+// Trong môi trường sandbox, chúng ta không thể import file '../socket'.
+// Hàm này mô phỏng việc khởi tạo socket và sẽ chỉ in ra console khi emit.
+// Trong ứng dụng thực tế của bạn, bạn cần giữ lại file '../socket'
+// và đảm bảo các dependencies đã được cài đặt.
+// =====================================================================
+const getSocket = () => {
+  console.log("Mock Socket: Initialized. Emitting events will be logged.");
+  return {
+    emit: (event, data) => {
+      console.log(`[SOCKET EMIT] Event: ${event}, Data:`, data);
+      // Đây là nơi logic gửi lên BE (Socket.IO) của bạn diễn ra
+    },
+    // Có thể thêm socket.on() nếu cần lắng nghe sự kiện
+  };
+};
+
+// Lấy instance socket
 const socket = getSocket();
 
 function Config() {
-  // ===== LED state =====
+  // ===== LED state (Control State) =====
   const [led1, setLed1] = useState(false);
-  const [led2, setLed2] = useState(false);
-  const [neoColor, setNeoColor] = useState({ r: 255, g: 255, b: 255 });
+  const [led2, setLed2] = useState(false); // Trạng thái NeoPixel ON/OFF
+  const [neoColor, setNeoColor] = useState({ r: 255, g: 255, b: 255 }); // Màu NeoPixel
 
   // ===== Chu kỳ CoreIOT (ms) =====
-  const [cycleMs, setCycleMs] = useState(10000);
-  const [currentCycleMs, setCurrentCycleMs] = useState(10000);
+  const [cycleMs, setCycleMs] = useState(10000); // Giá trị người dùng nhập/chọn
+  const [currentCycleMs, setCurrentCycleMs] = useState(10000); // Giá trị đã được lưu/cập nhật
 
   // ===== WiFi config =====
   const [ssid, setSsid] = useState("");
@@ -27,49 +40,57 @@ function Config() {
 
   const [error, setError] = useState("");
 
-  // Nếu muốn load chu kỳ hiện tại từ BE (ví dụ BE trả qua REST hoặc socket),
-  // tạm thời mình để cứng 10s, bạn có thể bổ sung sau.
+  // Tạm thời set currentCycleMs dựa trên giá trị khởi tạo
   useEffect(() => {
+    // Nếu có thể, nên fetch giá trị chu kỳ hiện tại từ BE/API ở đây
     setCurrentCycleMs(cycleMs);
   }, []);
 
   const cycleOptions = [5000, 10000, 15000, 30000, 60000];
-  const formatSeconds = (ms) => (ms ? Math.round(ms / 1000) : "-");
+  const formatSeconds = (ms) => (ms ? Math.round(ms / 1000) : "—");
 
   /* ================== HANDLERS ================== */
 
   // Toggle LED1: FE đổi state local + gửi lệnh lên BE
-  const handleToggleLed1 = () => {
+  const handleToggleLed1 = useCallback(() => {
     setLed1((prev) => {
       const next = !prev;
-      socket.emit("config-led1", next); // BE publish lên feed `led`
+      // Gửi lệnh lên BE để BE publish lên Adafruit feed 'led'
+      socket.emit("config-led1", next);
       return next;
     });
-  };
+  }, []);
 
-  // Khi kéo slider R/G/B
-  const handleNeoSliderChange = (component) => (e) => {
-    const value = Math.min(255, Math.max(0, Number(e.target.value) || 0));
-    const newColor = { ...neoColor, [component]: value };
-    setNeoColor(newColor);
+  // Khi kéo slider R/G/B (Sử dụng useCallback cho hiệu suất tốt hơn)
+  const handleNeoSliderChange = useCallback(
+    (component) => (e) => {
+      const value = Math.min(255, Math.max(0, Number(e.target.value) || 0));
+      setNeoColor((prevColor) => {
+        const newColor = { ...prevColor, [component]: value };
 
-    socket.emit("config-neo", {
-      r: newColor.r,
-      g: newColor.g,
-      b: newColor.b,
-      on: true,
-    });
-    setLed2(true);
-  };
+        // Gửi lệnh NeoPixel lên BE
+        socket.emit("config-neo", {
+          r: newColor.r,
+          g: newColor.g,
+          b: newColor.b,
+          on: true, // Bật NeoPixel khi kéo màu
+        });
+        setLed2(true); // Cập nhật trạng thái ON
+
+        return newColor;
+      });
+    },
+    []
+  );
 
   // Tắt LED2
-  const handleTurnOffNeo = () => {
+  const handleTurnOffNeo = useCallback(() => {
     socket.emit("config-neo", { r: 0, g: 0, b: 0, on: false });
     setLed2(false);
-  };
+  }, []);
 
   // Lưu chu kỳ CoreIOT
-  const handleSaveCycle = () => {
+  const handleSaveCycle = useCallback(() => {
     const ms = Number(cycleMs);
     if (!Number.isFinite(ms) || ms < 5000) {
       setError("Chu kỳ phải ≥ 5.000 ms");
@@ -77,11 +98,11 @@ function Config() {
     }
     setError("");
     setCurrentCycleMs(ms);
-    socket.emit("config-cycle", ms); // BE publish lên feed `chu-ky`
-  };
+    socket.emit("config-cycle", ms); // BE publish lên feed chu-ky
+  }, [cycleMs]);
 
   // Gửi cấu hình WiFi
-  const handleConnectWifi = () => {
+  const handleConnectWifi = useCallback(() => {
     if (!ssid.trim()) {
       setWifiMsg("Vui lòng nhập SSID.");
       return;
@@ -89,21 +110,25 @@ function Config() {
     setWifiMsg("");
     setError("");
 
-    socket.emit("config-wifi", { ssid, password }); // BE publish `wifi-id-password`
+    socket.emit("config-wifi", { ssid, password }); // BE publish wifi-id-password
     setWifiMsg("Đã gửi cấu hình Wi-Fi lên thiết bị (qua Adafruit).");
-  };
+  }, [ssid, password]);
 
-  // Ví dụ: bật gửi temp+humid+light (0/1) – bạn có thể gắn vào 1 toggle riêng
-  const enableAllSensors = () => {
+  // Bật gửi tất cả sensor
+  const enableAllSensors = useCallback(() => {
     socket.emit("config-sensor-enable", { temp: 1, humid: 1, light: 1 });
-  };
+  }, []);
+
+  // Hàm tiện ích để chuyển đổi màu NeoPixel thành chuỗi CSS RGB
+  const getRgbColorString = () =>
+    `rgb(${neoColor.r},${neoColor.g},${neoColor.b})`;
 
   return (
     <div className="col-span-11 border rounded-md shadow-sm bg-[#FAFAFA] px-5 py-8">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-semibold">Device configuration</h2>
         <span className="text-xs text-gray-500">
-          Backend: <code>Socket.IO</code>
+          Backend: <code>Socket.IO (Mocked)</code>
         </span>
       </div>
 
@@ -118,9 +143,11 @@ function Config() {
         <div className="bg-white rounded-xl shadow p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F3F4FF]">
-              <FontAwesomeIcon
-                icon={faLightbulb}
-                className={led1 || led2 ? "text-yellow-400" : "text-gray-400"}
+              {/* Thay thế FontAwesomeIcon bằng Lucide: Lightbulb */}
+              <Lightbulb
+                className={
+                  led1 || led2 ? "text-yellow-400 w-5 h-5" : "text-gray-400 w-5 h-5"
+                }
               />
             </div>
             <div className="font-semibold">LED & NeoPixel</div>
@@ -141,7 +168,7 @@ function Config() {
                 led1
                   ? "bg-emerald-100 text-emerald-700"
                   : "bg-gray-100 text-gray-700"
-              }`}
+              } hover:shadow-md transition-shadow`}
             >
               Toggle
             </button>
@@ -161,12 +188,13 @@ function Config() {
             <div
               className="w-10 h-5 rounded-full border"
               style={{
-                backgroundColor: `rgb(${neoColor.r},${neoColor.g},${neoColor.b})`,
+                backgroundColor: getRgbColorString(),
               }}
             />
           </div>
 
           <div className="space-y-2 text-xs">
+            {/* Sliders cho R, G, B */}
             <div className="flex items-center gap-2">
               <span className="w-6 text-red-500">R</span>
               <input
@@ -175,7 +203,7 @@ function Config() {
                 max="255"
                 value={neoColor.r}
                 onChange={handleNeoSliderChange("r")}
-                className="flex-1"
+                className="flex-1 accent-red-500" // Thêm màu cho slider
               />
               <span className="w-8 text-right">{neoColor.r}</span>
             </div>
@@ -187,7 +215,7 @@ function Config() {
                 max="255"
                 value={neoColor.g}
                 onChange={handleNeoSliderChange("g")}
-                className="flex-1"
+                className="flex-1 accent-green-500" // Thêm màu cho slider
               />
               <span className="w-8 text-right">{neoColor.g}</span>
             </div>
@@ -199,7 +227,7 @@ function Config() {
                 max="255"
                 value={neoColor.b}
                 onChange={handleNeoSliderChange("b")}
-                className="flex-1"
+                className="flex-1 accent-blue-500" // Thêm màu cho slider
               />
               <span className="w-8 text-right">{neoColor.b}</span>
             </div>
@@ -207,7 +235,7 @@ function Config() {
 
           <button
             onClick={handleTurnOffNeo}
-            className="mt-2 text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 self-end"
+            className="mt-2 text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 self-end hover:bg-gray-200 transition-colors"
           >
             Tắt LED 2
           </button>
@@ -217,7 +245,8 @@ function Config() {
         <div className="bg-white rounded-xl shadow p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F3F4FF]">
-              <FontAwesomeIcon icon={faSliders} className="text-indigo-600" />
+              {/* Thay thế FontAwesomeIcon bằng Lucide: SlidersHorizontal */}
+              <SlidersHorizontal className="text-indigo-600 w-5 h-5" />
             </div>
             <div className="font-semibold">Chu kỳ gửi CoreIOT</div>
           </div>
@@ -229,8 +258,11 @@ function Config() {
             </span>
           </div>
 
-          <label className="text-xs text-gray-500">Chọn chu kỳ mới</label>
+          <label htmlFor="cycle-select" className="text-xs text-gray-500">
+            Chọn chu kỳ mới
+          </label>
           <select
+            id="cycle-select"
             value={cycleMs}
             onChange={(e) => setCycleMs(Number(e.target.value))}
             className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -244,14 +276,14 @@ function Config() {
 
           <button
             onClick={handleSaveCycle}
-            className="mt-2 text-sm px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+            className="mt-2 text-sm px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
           >
             Cập nhật chu kỳ
           </button>
 
           <button
             onClick={enableAllSensors}
-            className="mt-1 text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 self-start"
+            className="mt-1 text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 self-start hover:bg-gray-200 transition-colors"
           >
             Bật gửi tất cả sensor
           </button>
@@ -261,7 +293,8 @@ function Config() {
         <div className="bg-white rounded-xl shadow p-4 flex flex-col gap-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F3F4FF]">
-              <FontAwesomeIcon icon={faWifi} className="text-emerald-500" />
+              {/* Thay thế FontAwesomeIcon bằng Lucide: Wifi */}
+              <Wifi className="text-emerald-500 w-5 h-5" />
             </div>
             <div className="font-semibold">Cấu hình Wi-Fi</div>
           </div>
@@ -285,7 +318,7 @@ function Config() {
 
           <button
             onClick={handleConnectWifi}
-            className="mt-1 text-sm px-4 py-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600"
+            className="mt-1 text-sm px-4 py-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
           >
             Gửi cấu hình Wi-Fi
           </button>

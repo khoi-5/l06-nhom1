@@ -55,6 +55,7 @@ void coreiot_task(void *pvParameters) {
     Serial.print(topicHTL);
     Serial.print(" = ");
     Serial.println(buffer);
+    Serial.print(" ");
 
     vTaskDelay(delayTicks);
   }

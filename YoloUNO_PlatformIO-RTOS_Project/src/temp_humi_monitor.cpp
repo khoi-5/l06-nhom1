@@ -85,7 +85,7 @@ void temp_humi_monitor(void *pvParameters){
             Serial.print("%  T: ");
             Serial.print(avgTemp);
             Serial.println("°C");
-            Serial.println("\n");
+            Serial.println(" ");
         }
 
         // ===== 7. Đợi 5s rồi đọc tiếp =====
