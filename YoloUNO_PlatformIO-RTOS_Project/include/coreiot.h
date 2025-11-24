@@ -59,6 +59,12 @@ extern bool g_lightEnable;
 extern bool g_tempEnable;
 extern bool g_humidEnable;
 
+
+extern bool isAPMode;
+extern bool isWifiConnected;
+extern bool connecting;
+extern unsigned long connect_start_ms;
+
 // ===== Hàm dùng chung =====
 void setup_coreiot();   // chờ Internet + setServer + setCallback
 void reconnect();       // reconnect MQTT, subscribe các control feed

@@ -9,54 +9,58 @@ extern float glob_light;
 
 // ================== TASK CHÍNH GỬI/POLL MQTT ==================
 void coreiot_task(void *pvParameters) {
-  setup_coreiot();
+  setup_coreiot();   // chờ WiFi + setup MQTT
 
-  // set LED mặc định
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
-  const TickType_t delayTicks = pdMS_TO_TICKS(chu_ky * 1000); // ví dụ 10s
+  TickType_t lastPublish = xTaskGetTickCount();
 
   while (1) {
+    // 1) Đảm bảo MQTT luôn online
     if (!client.connected()) {
-      reconnect();
+      reconnect();   // hàm reconnect cũ của bạn
     }
-    client.loop();  // xử lý MQTT, gọi mqttCallback khi có message
+    client.loop();   // xử lý gói tin đến / ping
 
-    // Chọn giá trị gửi lên tuỳ theo enable/disable
-    float tempToSend  = g_tempEnable  ? glob_temperature : 0.0f;
-    float humidToSend = g_humidEnable ? glob_humidity    : 0.0f;
-    float lightToSend = g_lightEnable ? glob_light       : 0.0f;
+    // 2) Tính khoảng thời gian publish theo chu_ky (GIÂY)
+    TickType_t now      = xTaskGetTickCount();
+    TickType_t interval = pdMS_TO_TICKS(chu_ky * 1000);  // chu_ky: giây
 
-    // ----- Làm tròn -----
-    // temp & humid: 2 chữ số thập phân
-    float tempRounded  = roundf(tempToSend  * 100.0f) / 100.0f;
-    float humidRounded = roundf(humidToSend * 100.0f) / 100.0f;
-    int   lightInt     = (int)roundf(lightToSend);
+    if (now - lastPublish >= interval) {
+      lastPublish = now;
 
-    // ===== Tạo JSON với string cho temp & humid =====
-    StaticJsonDocument<128> doc;
+      // ----- Chọn giá trị gửi -----
+      float tempToSend  = g_tempEnable  ? glob_temperature : 0.0f;
+      float humidToSend = g_humidEnable ? glob_humidity    : 0.0f;
+      float lightToSend = g_lightEnable ? glob_light       : 0.0f;
 
-    char tempStr[10];
-    char humidStr[10];
+      float tempRounded  = roundf(tempToSend  * 100.0f) / 100.0f;
+      float humidRounded = roundf(humidToSend * 100.0f) / 100.0f;
+      int   lightInt     = (int)roundf(lightToSend);
 
-    snprintf(tempStr,  sizeof(tempStr),  "%.2f", tempRounded);   // "25.10"
-    snprintf(humidStr, sizeof(humidStr), "%.2f", humidRounded);  // "57.17"
+      StaticJsonDocument<128> doc;
+      char tempStr[10], humidStr[10];
 
-    doc["temperature"] = tempStr;   // string
-    doc["humidity"]    = humidStr;  // string
-    doc["light"]       = lightInt;  // number
+      snprintf(tempStr,  sizeof(tempStr),  "%.2f", tempRounded);
+      snprintf(humidStr, sizeof(humidStr), "%.2f", humidRounded);
 
-    char buffer[128];
-    size_t n = serializeJson(doc, buffer);
-    client.publish(topicHTL.c_str(), buffer, n);
+      doc["temperature"] = tempStr;
+      doc["humidity"]    = humidStr;
+      doc["light"]       = lightInt;
 
-    Serial.print("Published JSON -> ");
-    Serial.print(topicHTL);
-    Serial.print(" = ");
-    Serial.println(buffer);
-    Serial.print(" ");
+      char buffer[128];
+      size_t n = serializeJson(doc, buffer);
+      client.publish(topicHTL.c_str(), buffer, n);
 
-    vTaskDelay(delayTicks);
+      Serial.print("Published JSON (chu_ky = ");
+      Serial.print(chu_ky);
+      Serial.print(" s) -> ");
+      Serial.println(buffer);
+      Serial.print(" ");
+    }
+
+    // 3) Nhịp lặp MQTT: ~100ms là được
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 }

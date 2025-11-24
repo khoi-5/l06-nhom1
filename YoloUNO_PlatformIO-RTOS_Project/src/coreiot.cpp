@@ -89,16 +89,11 @@ void reconnect() {
 
 // ================== SETUP MQTT (GỌI TRONG TASK COREIOT) ==================
 void setup_coreiot() {
-  // Chờ có kết nối Internet (semaphore do WiFi task cho)
-  while (1) {
-    if (xSemaphoreTake(xBinarySemaphoreInternet, portMAX_DELAY)) {
-      break;
-    }
+  while (xSemaphoreTake(xBinarySemaphoreInternet, pdMS_TO_TICKS(500)) == pdFALSE) {
     Serial.print(".");
-    vTaskDelay(pdMS_TO_TICKS(500));
   }
   Serial.println(" Connected!");
 
-  client.setServer(AIO_SERVER, mqttPort);    // AIO_SERVER, mqttPort từ aio.h
-  client.setCallback(mqttCallback);          // callback ở file coreiot_subscribe.cpp
+  client.setServer(AIO_SERVER, mqttPort);
+  client.setCallback(mqttCallback);
 }

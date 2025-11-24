@@ -111,11 +111,19 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     const char* p = doc["password"] | "";
 
     if (strlen(s) > 0) {
-      wifi_ssid = String(s);
+      wifi_ssid     = String(s);
       wifi_password = String(p);
       Serial.printf("New WiFi cfg -> SSID=%s\n", wifi_ssid.c_str());
       Serial.print(" ");
-      connectToWiFi();   // dùng lại hàm bên mainserver
+
+      // 🔥 QUAN TRỌNG: dùng chung logic timeout 10s như HTTP /connect
+      isAPMode        = false;
+      isWifiConnected = false;
+      connecting      = true;
+      connect_start_ms = millis();
+
+      connectToWiFi();   // bắt đầu thử connect STA
     }
   }
+
 }

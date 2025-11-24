@@ -12,17 +12,20 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/* ---------- ENV ---------- */
+/* ---------- ENV & FEED KEYS ---------- */
 const {
   AIO_USERNAME,
   AIO_KEY,
-  FEED_TEMP  = 'temperature',
-  FEED_HUMID = 'humidity',
-  FEED_LIGHT = 'light',
 
-  FEED_LED        = 'led',
-  FEED_LIGHT_CTRL = 'light_control',
-  FEED_HT_CTRL    = 'humidity_temperature_control',
+  // SENSOR
+  FEED_HTL      = 'humidity-temperature-light',          // JSON sensor
+
+  // CONTROL
+  FEED_HTL_CTRL = 'humidity-temperature-light-control',  // JSON {temperature,humidity,light}
+  FEED_LED      = 'led',                                 // "ON"/"OFF"
+  FEED_LED_NEO  = 'led-neo',                             // JSON {r,g,b,on}
+  FEED_WIFI     = 'wifi-id-password',                    // JSON {ssid,password}
+  FEED_CYCLE    = 'chu-ky',                              // "10" (giây)
 
   PORT      = 3001,
   MQTT_URL  = 'mqtt://io.adafruit.com',
@@ -37,7 +40,6 @@ if (!AIO_USERNAME || !AIO_KEY) {
 const app = express();
 app.use(cors());
 app.use(express.json());
-
 app.use(express.static(path.join(__dirname, 'public')));
 
 const httpServer = createServer(app);
@@ -56,38 +58,50 @@ const mqttClient = mqtt.connect(MQTT_URL, {
 mqttClient.on('connect', () => {
   console.log(`MQTT connected -> ${MQTT_URL}:${MQTT_PORT}`);
 
-  // Sub tất cả feed của user
+  // SUB toàn bộ để đọc sensor JSON
   const topic = `${AIO_USERNAME}/feeds/+`;
   mqttClient.subscribe(topic, (err) => {
-    if (err) {
-      console.error('Subscribe error:', topic, err.message);
-    } else {
-      console.log('Subscribed:', topic);
-    }
+    if (err) console.error('Subscribe error:', topic, err.message);
+    else console.log('Subscribed:', topic);
   });
 });
 
-// chỉ đẩy 3 feed sensor sang FE
+/* ===== ESP → AIO → BE → FE (sensor) ===== */
 mqttClient.on('message', (topic, payload) => {
   try {
     const valueStr = payload.toString().trim();
-    const feed = topic.split('/').pop(); // ví dụ 'temperature'
+    const feed = topic.split('/').pop(); // ví dụ 'humidity-temperature-light'
 
     console.log('[MQTT] recv:', { topic, feed, valueStr });
 
-    if (![FEED_TEMP, FEED_HUMID, FEED_LIGHT].includes(feed)) {
-      // control feed thì FE không cần
+    // chỉ quan tâm feed sensor JSON
+    if (feed !== FEED_HTL) return;
+
+    let parsed;
+    try {
+      parsed = JSON.parse(valueStr);
+    } catch (e) {
+      console.warn('Invalid JSON from HTL feed:', valueStr);
       return;
     }
 
-    const num = Number(valueStr);
-    if (!Number.isFinite(num)) {
-      console.warn('Invalid numeric value from feed', feed, 'payload =', valueStr);
-      return;
-    }
+    const { temperature, humidity, light } = parsed;
+    const at = Date.now();
 
-    const data = { at: Date.now(), feed, value: num };
-    io.emit('telemetry', data);
+    const tempNum  = Number(temperature);
+    const humidNum = Number(humidity);
+    const lightNum = Number(light);
+
+    // emit 3 event giống như ngày xưa 3 feed lẻ
+    if (Number.isFinite(tempNum)) {
+      io.emit('telemetry', { at, feed: 'temperature', value: tempNum });
+    }
+    if (Number.isFinite(humidNum)) {
+      io.emit('telemetry', { at, feed: 'humidity', value: humidNum });
+    }
+    if (Number.isFinite(lightNum)) {
+      io.emit('telemetry', { at, feed: 'light', value: lightNum });
+    }
   } catch (e) {
     console.error('Handle message error:', e.message);
   }
@@ -98,37 +112,118 @@ mqttClient.on('close', () => console.log('MQTT connection closed'));
 mqttClient.on('error', (err) => console.error('MQTT error:', err.message));
 
 /* ---------- Helper publish ---------- */
-function publishControl(feedKey, desired, label) {
-  if (!feedKey) {
-    console.warn(`No feed key configured for ${label}`);
-    return;
-  }
+function publishString(feedKey, value, label = '') {
+  if (!feedKey) return;
   const topic = `${AIO_USERNAME}/feeds/${feedKey}`;
-  const msg = typeof desired === 'string' ? desired : (desired ? 'ON' : 'OFF');
-
-  mqttClient.publish(topic, msg, { qos: 0 }, (err) => {
-    if (err) console.error(`Publish ${label} err:`, err.message);
-    else console.log(`${label} command published:`, msg);
+  mqttClient.publish(topic, String(value), { qos: 0 }, (err) => {
+    if (err) console.error(`Publish ${label || feedKey} error:`, err.message);
+    else console.log(`Published ${label || feedKey}:`, value);
   });
 }
 
-/* ---------- WS: nhận lệnh từ FE ---------- */
+function publishJson(feedKey, obj, label = '') {
+  publishString(feedKey, JSON.stringify(obj), label);
+}
+
+/* ---------- SENSOR CONTROL STATE (HTL_CTRL) ---------- */
+// 1 = bật (ESP gửi giá trị thật), 0 = tắt (ESP gửi 0)
+let sensorState = {
+  temperature: 1,
+  humidity: 1,
+  light: 1,
+};
+
+function publishSensorControl(label = 'HTL_CTRL') {
+  publishJson(
+    FEED_HTL_CTRL,
+    {
+      temperature: sensorState.temperature,
+      humidity: sensorState.humidity,
+      light: sensorState.light,
+    },
+    label
+  );
+}
+
+/* ===== FE → BE → AIO → ESP (control) ===== */
 io.on('connection', (socket) => {
   console.log('WS client connected');
 
-  // LED
-  socket.on('set-led', (desired) => {
-    publishControl(FEED_LED, desired, 'LED');
+  // 1) LED 1 (bật/tắt) - dùng trong Config.jsx
+  socket.on('config-led1', (payload) => {
+    const on = (typeof payload === 'string')
+      ? (payload === 'ON' || payload === '1')
+      : !!payload;
+    publishString(FEED_LED, on ? 'ON' : 'OFF', 'LED1');
   });
 
-  // LIGHT control
-  socket.on('set-light', (desired) => {
-    publishControl(FEED_LIGHT_CTRL, desired, 'LIGHT_CTRL');
+  // 2) LED Neo: { r, g, b, on } - dùng trong Config.jsx
+  socket.on('config-neo', (data) => {
+    if (!data) return;
+    const r = Number(data.r) || 0;
+    const g = Number(data.g) || 0;
+    const b = Number(data.b) || 0;
+    const on = data.on !== false; // default: true
+    publishJson(
+      FEED_LED_NEO,
+      { r, g, b, on: on ? 1 : 0 },
+      'LED_NEO',
+    );
   });
 
-  // Humidity + Temperature control
-  socket.on('set-env', (desired) => {
-    publishControl(FEED_HT_CTRL, desired, 'HT_CTRL');
+  // 3) Chu kỳ gửi: FE dùng ms → gửi lên AIO dạng "giây"
+  socket.on('config-cycle', (msOrSec) => {
+    const num = Number(msOrSec);
+    if (!Number.isFinite(num) || num <= 0) return;
+    const seconds = num >= 1000 ? Math.round(num / 1000) : num;
+    publishString(FEED_CYCLE, seconds, 'CYCLE');
+  });
+
+  // 4) WiFi: { ssid, password }
+  socket.on('config-wifi', ({ ssid, password }) => {
+    if (!ssid) return;
+    publishJson(
+      FEED_WIFI,
+      { ssid, password: password || '' },
+      'WIFI_ID_PASSWORD',
+    );
+  });
+
+  // 5a) Bật/tắt nhiều sensor cùng lúc (Config.jsx dùng)
+  socket.on('config-sensor-enable', (cfg) => {
+    if (!cfg) return;
+    sensorState.temperature = cfg.temp  ? 1 : 0;
+    sensorState.humidity    = cfg.humid ? 1 : 0;
+    sensorState.light       = cfg.light ? 1 : 0;
+    publishSensorControl('HTL_CTRL (config-sensor-enable)');
+  });
+
+  // 5b) Từng card riêng lẻ:
+  //    Humidity.jsx → socket.emit("set-humid", "ON"/"OFF")
+  socket.on('set-humid', (payload) => {
+    const on = (typeof payload === 'string')
+      ? (payload === 'ON' || payload === '1')
+      : !!payload;
+    sensorState.humidity = on ? 1 : 0;
+    publishSensorControl('HTL_CTRL (set-humid)');
+  });
+
+  //    Temperature.jsx → socket.emit("set-temp", "ON"/"OFF")
+  socket.on('set-temp', (payload) => {
+    const on = (typeof payload === 'string')
+      ? (payload === 'ON' || payload === '1')
+      : !!payload;
+    sensorState.temperature = on ? 1 : 0;
+    publishSensorControl('HTL_CTRL (set-temp)');
+  });
+
+  //    Light.jsx → socket.emit("set-light", "ON"/"OFF")
+  socket.on('set-light', (payload) => {
+    const on = (typeof payload === 'string')
+      ? (payload === 'ON' || payload === '1')
+      : !!payload;
+    sensorState.light = on ? 1 : 0;
+    publishSensorControl('HTL_CTRL (set-light)');
   });
 
   socket.on('disconnect', () => {

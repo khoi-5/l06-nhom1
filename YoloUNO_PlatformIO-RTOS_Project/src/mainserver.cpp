@@ -1,9 +1,18 @@
 #include "mainserver.h"
+#include <WiFi.h>
+#include <WebServer.h>
+#include "neo_blinky.h"   // điều khiển NeoPixel cho LED2
 
 // ================== Biến toàn cục riêng của mainserver ==================
 
 WebServer server(80);
-bool isAPMode = true;  // true = đang ở AP mode cấu hình WiFi
+
+bool isAPMode     = true;   // true = đang ở AP mode cấu hình WiFi
+bool led1_state   = false;  // trạng thái LED1 (digital)
+bool led2_state   = false;  // trạng thái LED2 (NeoPixel)
+
+unsigned long connect_start_ms = 0;
+bool connecting   = false;  // đang thử kết nối WiFi STA
 
 // ================== HTML MAIN PAGE ==================
 
@@ -12,9 +21,7 @@ String mainPage() {
   float humidity    = glob_humidity;
   float light       = glob_light;
 
-  String led1 = digitalRead(LED1_PIN) ? "ON" : "OFF";
-  String led2 = digitalRead(LED2_PIN) ? "ON" : "OFF";
-
+  // HTML sẽ được JS cập nhật, nên không cần nhét sẵn trạng thái led
   String html = R"rawliteral(
 <!DOCTYPE html>
 <html lang="vi">
@@ -213,6 +220,7 @@ String mainPage() {
         `rgb(${r}, ${g}, ${b})`;
     }
 
+    // gọi khi kéo slider: cập nhật preview + đổi màu LED2 realtime
     function updateLed2Live() {
       updateLed2Preview();
 
@@ -242,8 +250,8 @@ String mainPage() {
       fetch('/sensors')
         .then(res => res.json())
         .then(data => {
-          document.getElementById('temp').innerText = data.temp;
-          document.getElementById('hum').innerText = data.hum;
+          document.getElementById('temp').innerText  = data.temp;
+          document.getElementById('hum').innerText   = data.hum;
           document.getElementById('light').innerText = data.light;
         });
     }, 1500);
@@ -253,11 +261,11 @@ String mainPage() {
 </html>
 )rawliteral";
 
-  // (hiện giờ mình không chèn sẵn led1/led2 vào HTML, vì JS sẽ cập nhật)
   return html;
 }
 
-// ==================== TRANG CÀI ĐẶT (HOÀN CHỈNH) ====================
+// ==================== TRANG CÀI ĐẶT ====================
+
 String settingsPage() {
   return R"rawliteral(
 <!DOCTYPE html>
@@ -321,8 +329,8 @@ String settingsPage() {
     fetch('/getcycle')
       .then(r => r.text())
       .then(ms => {
-        const msVal = parseInt(ms) || 10000;
-        const sec = Math.round(msVal / 1000);
+        const msVal = parseInt(ms) || 10000;        // nhận ms từ ESP
+        const sec   = Math.round(msVal / 1000);
         document.getElementById('cycle').value = msVal;
         document.getElementById('currentCycle').innerText = sec;
       });
@@ -355,220 +363,206 @@ String settingsPage() {
   )rawliteral";
 }
 
-// ================== WiFi & Server ==================
+// ================== Handlers ==================
 
-void startAP() {
-  isAPMode = true;
-  isWifiConnected = false;
-
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssid.c_str(), password.c_str());
-  IPAddress ip = WiFi.softAPIP();
-
-  Serial.print("[WiFi] AP mode. SSID: ");
-  Serial.print(ssid);
-  Serial.print("  IP: ");
-  Serial.println(ip);
-  Serial.print(" ");
+void handleRoot() {
+  server.send(200, "text/html", mainPage());
 }
 
-void connectToWiFi() {
-  if (wifi_ssid.isEmpty()) {
-    Serial.println("[WiFi] Chưa có wifi_ssid, giữ AP mode.");
-    Serial.print(" ");
-    startAP();
-    return;
-  }
+// Lấy chu kỳ hiện tại: chu_ky đang lưu theo GIÂY trong global.cpp
+void handleGetCycle() {
+  uint32_t ms = (uint32_t)chu_ky * 1000;     // convert sang ms cho JS
+  server.send(200, "text/plain", String(ms));
+}
 
-  isAPMode        = false;
-  isWifiConnected = false;
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
-
-  Serial.print("[WiFi] Đang kết nối tới ");
-  Serial.println(wifi_ssid);
-  Serial.print(" ");
-
-  unsigned long start = millis();
-  unsigned long timeout = 15000;  // 15s
-
-  while (WiFi.status() != WL_CONNECTED && millis() - start < timeout) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println();
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.print("[WiFi] Đã kết nối, IP: ");
-    Serial.println(WiFi.localIP());
-    Serial.print(" ");
-    isWifiConnected = true;
-
-    if (xBinarySemaphoreInternet != NULL) {
-      xSemaphoreGive(xBinarySemaphoreInternet);
+// Cập nhật chu kỳ: nhận ms từ UI, lưu lại theo GIÂY
+void handleSetCycle() {
+  if (server.hasArg("ms")) {
+    uint32_t new_ms = server.arg("ms").toInt();
+    if (new_ms >= 5000 && new_ms <= 300000) {
+      chu_ky = new_ms / 1000;  // lưu 5,10,15,... giây
+      server.send(200, "text/plain",
+                  "Đã cập nhật chu kỳ thành " + String(chu_ky) + " giây!");
+    } else {
+      server.send(400, "text/plain", "Chu kỳ phải từ 5 đến 300 giây!");
     }
   } else {
-    Serial.println("[WiFi] Kết nối thất bại, quay lại AP mode.");
-    Serial.print(" ");
-    startAP();
+    server.send(400, "text/plain", "Thiếu tham số ms!");
   }
 }
 
+// Toggle & set màu LED
+void handleToggle() {
+  int led = server.hasArg("led") ? server.arg("led").toInt() : 0;
+
+  if (led == 1) {
+    led1_state = !led1_state;
+    Serial.println("CONTROL LED1");
+    Serial.println(" ");
+    pinMode(LED1_PIN, OUTPUT);
+    digitalWrite(LED1_PIN, led1_state ? HIGH : LOW);
+  }
+  else if (led == 2) {
+    // Tắt LED 2
+    if (server.hasArg("off")) {
+      led2_state = false;
+      Serial.println("TURN OFF LED2");
+      Serial.println(" ");
+      neo_toggle(0, 0, 0, false);
+    }
+    // Bật LED 2 với màu R,G,B
+    else if (server.hasArg("r") && server.hasArg("g") && server.hasArg("b")) {
+      int r = server.arg("r").toInt();
+      int g = server.arg("g").toInt();
+      int b = server.arg("b").toInt();
+
+      r = constrain(r, 0, 255);
+      g = constrain(g, 0, 255);
+      b = constrain(b, 0, 255);
+
+      led2_state = true;
+      Serial.printf("SET LED2 COLOR: R=%d G=%d B=%d\n", r, g, b);
+      Serial.println(" ");
+      neo_toggle(r, g, b, true);
+    }
+    // Nếu không có param gì: toggle trắng
+    else {
+      led2_state = !led2_state;
+      neo_toggle(255, 255, 255, led2_state);
+    }
+  }
+
+  server.send(
+    200,
+    "application/json",
+    "{\"led1\":\"" + String(led1_state ? "ON" : "OFF") +
+    "\",\"led2\":\"" + String(led2_state ? "ON" : "OFF") + "\"}"
+  );
+}
+
+void handleSensors() {
+  float t = glob_temperature;
+  float h = glob_humidity;
+  float l = glob_light;
+
+  String json = "{\"temp\":"  + String(t) +
+                ",\"hum\":"   + String(h) +
+                ",\"light\":" + String(l) + "}";
+  server.send(200, "application/json", json);
+}
+
+// Trang settings
+void handleSettings() {
+  server.send(200, "text/html", settingsPage());
+}
+
+// Kết nối WiFi từ UI
+void handleConnect() {
+  Serial.println("HTTP /connect");
+  Serial.println(" ");
+  wifi_ssid     = server.arg("ssid");
+  wifi_password = server.arg("pass");
+
+  server.send(200, "text/plain", "Connecting....");
+  isAPMode       = false;
+  connecting     = true;
+  connect_start_ms = millis();
+
+  connectToWiFi(); // bắt đầu connect STA
+}
+
+// ================== WiFi & Server ==================
+
 void setupServer() {
-  pinMode(LED1_PIN, OUTPUT);
-  pinMode(LED2_PIN, OUTPUT);
-  pinMode(BOOT_PIN, INPUT_PULLUP);
+  server.on("/",        HTTP_GET, handleRoot);
+  server.on("/toggle",  HTTP_GET, handleToggle);
+  server.on("/sensors", HTTP_GET, handleSensors);
+  server.on("/settings",HTTP_GET, handleSettings);
+  server.on("/connect", HTTP_GET, handleConnect);
+  server.on("/getcycle",HTTP_GET, handleGetCycle);
+  server.on("/setcycle",HTTP_GET, handleSetCycle);
 
-  digitalWrite(LED1_PIN, LOW);
-  digitalWrite(LED2_PIN, LOW);
-
-  // Trang chính
-  server.on("/", HTTP_GET, []() {
-    server.send(200, "text/html", mainPage());
-  });
-
-  // Trang settings
-  server.on("/settings", HTTP_GET, []() {
-    server.send(200, "text/html", settingsPage());
-  });
-
-  // API trả về cảm biến
-  server.on("/sensors", HTTP_GET, []() {
-    String json = "{";
-    json += "\"temp\":" + String(glob_temperature, 1) + ",";
-    json += "\"hum\":"  + String(glob_humidity, 1) + ",";
-    json += "\"light\":" + String(glob_light, 0);
-    json += "}";
-    server.send(200, "application/json", json);
-  });
-
-  // API toggle LED + chỉnh màu (hiện tại chỉ bật/tắt digital cho đơn giản)
-  server.on("/toggle", HTTP_GET, []() {
-    int led = server.hasArg("led") ? server.arg("led").toInt() : 0;
-
-    if (led == 1) {
-      bool state = !digitalRead(LED1_PIN);
-      digitalWrite(LED1_PIN, state);
-    } else if (led == 2) {
-      if (server.hasArg("off") && server.arg("off") == "1") {
-        digitalWrite(LED2_PIN, LOW);
-      } else {
-        // Ở đây bạn có thể gọi hàm set màu NeoPixel nếu muốn.
-        // Tạm thời: chỉ bật LED2 digital.
-        digitalWrite(LED2_PIN, HIGH);
-      }
-    }
-
-    String json = "{";
-    json += "\"led1\":\"";
-    json += digitalRead(LED1_PIN) ? "ON" : "OFF";
-    json += "\",\"led2\":\"";
-    json += digitalRead(LED2_PIN) ? "ON" : "OFF";
-    json += "\"}";
-    server.send(200, "application/json", json);
-  });
-
-  // API lấy chu kỳ (ms) – ánh xạ từ chu_ky (giây) trong global.cpp
-  server.on("/getcycle", HTTP_GET, []() {
-    int ms = chu_ky * 1000;   // global chu_ky đang để 10 (giây), mình convert sang ms
-    server.send(200, "text/plain", String(ms));
-  });
-
-  // API set chu kỳ (ms) – lưu lại theo giây vào chu_ky
-  server.on("/setcycle", HTTP_GET, []() {
-    if (server.hasArg("ms")) {
-      int ms = server.arg("ms").toInt();
-      if (ms < 1000) ms = 1000;
-      chu_ky = ms / 1000;   // lưu dạng giây để không phá logic code khác
-
-      server.send(200, "text/plain",
-                  "Đã cập nhật chu kỳ thành " + String(ms) + " ms");
-    } else {
-      server.send(400, "text/plain", "Thiếu tham số ms");
-    }
-  });
-
-  // API kết nối WiFi từ trang settings
-  server.on("/connect", HTTP_GET, []() {
-    if (!server.hasArg("ssid")) {
-      server.send(400, "text/plain", "Thiếu tham số ssid");
-      return;
-    }
-
-    wifi_ssid     = server.arg("ssid");
-    wifi_password = server.hasArg("pass") ? server.arg("pass") : "";
-
-    Serial.print("[WiFi] SSID mới (GET): ");
-    Serial.println(wifi_ssid);
-
-    connectToWiFi();
-
-    String msg;
-    if (isWifiConnected) {
-      msg = "Đã kết nối tới " + wifi_ssid;
-    } else {
-      msg = "Kết nối thất bại, vẫn ở AP mode";
-    }
-    server.send(200, "text/plain", msg);
-  });
-
-  // Giữ /wifi POST nếu sau này bạn còn dùng
-  server.on("/wifi", HTTP_POST, []() {
-    if (server.hasArg("ssid") && server.hasArg("pass")) {
-      wifi_ssid     = server.arg("ssid");
-      wifi_password = server.arg("pass");
-
-      Serial.print("[WiFi] SSID mới (POST): ");
-      Serial.println(wifi_ssid);
-      Serial.print(" ");
-
-      server.send(200, "text/html",
-                  "<html><body><h3>Đã nhận cấu hình Wi-Fi.</h3>"
-                  "<p>ESP32 đang thử kết nối...</p>"
-                  "<p><a href='/'>Về Dashboard</a></p></body></html>");
-
-      connectToWiFi();
-    } else {
-      server.send(400, "text/plain", "Thiếu tham số ssid/pass");
-    }
-  });
-
-  server.onNotFound([]() {
+  server.onNotFound([](){
     server.send(404, "text/plain", "Not found");
   });
 
   server.begin();
-  Serial.println("[HTTP] WebServer đã khởi động ");
-  Serial.print(" ");
+  Serial.println("[HTTP] WebServer started");
+  Serial.println(" ");
 }
 
-// ================== FreeRTOS Task ==================
+void startAP() {
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(ssid.c_str(), password.c_str());
+  Serial.print("AP IP address: ");
+  Serial.println(WiFi.softAPIP());
+  Serial.println(" ");
+  isAPMode       = true;
+  connecting     = false;
+  isWifiConnected = false;
+}
+
+void connectToWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
+  Serial.print("Connecting to: ");
+  Serial.print(wifi_ssid.c_str());
+  //Serial.print(" Password: ");
+  //Serial.println(wifi_password.c_str());
+  Serial.println(" ");
+}
+
+// ================== FreeRTOS Main Task ==================
 
 void main_server_task(void *pvParameters) {
   (void) pvParameters;
 
-  // Ban đầu cho chạy AP để cấu hình
+  pinMode(BOOT_PIN, INPUT_PULLUP);
+
   startAP();
   setupServer();
 
-  for (;;) {
+  while (1) {
     server.handleClient();
 
-    // Nhấn giữ BOOT 3s để reset về AP mode
-    static unsigned long pressedAt = 0;
+    // BOOT Button -> về AP mode
     if (digitalRead(BOOT_PIN) == LOW) {
-      if (pressedAt == 0) pressedAt = millis();
-      if (millis() - pressedAt > 3000) {
-        Serial.println("[BTN] Giữ BOOT 3s -> Reset về AP mode");
-        WiFi.disconnect(true);
-        startAP();
-        pressedAt = 0;
+      vTaskDelay(pdMS_TO_TICKS(100));
+      if (digitalRead(BOOT_PIN) == LOW) {
+        if (!isAPMode) {
+          Serial.println("BOOT pressed -> back to AP");
+          Serial.println(" ");
+          startAP();
+          setupServer();
+        }
       }
-    } else {
-      pressedAt = 0;
     }
 
-    vTaskDelay(pdMS_TO_TICKS(10));
+    // Logic STA mode
+    if (connecting) {
+      if (WiFi.status() == WL_CONNECTED) {
+        Serial.print("STA IP address: ");
+        Serial.println(WiFi.localIP());
+        Serial.println(" ");
+        isWifiConnected = true;
+
+        if (xBinarySemaphoreInternet != NULL) {
+          xSemaphoreGive(xBinarySemaphoreInternet);
+        }
+
+        isAPMode   = false;
+        connecting = false;
+      }
+      else if (millis() - connect_start_ms > 10000) { // timeout 10s
+        Serial.println("WiFi connect failed! Back to AP.");
+        Serial.println(" ");
+        startAP();
+        setupServer();
+        connecting = false;
+        isWifiConnected = false;
+      }
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(20));
   }
 }
