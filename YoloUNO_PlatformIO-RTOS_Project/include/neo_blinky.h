@@ -7,7 +7,7 @@
 
 #define NEO_PIN 45
 #define LED_COUNT 1 
-
+void neo_toggle(int red, int green, int blue, bool control_singal);
 void neo_blinky(void *pvParameters);
 
 
