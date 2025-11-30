@@ -2,8 +2,8 @@
 
 ## Công nghệ sử dụng
 ### Phần cứng
--ESP32
--YOLO-uno
+- ESP32
+- YOLO-uno
 
 ### Database
 - Adafruit IO
