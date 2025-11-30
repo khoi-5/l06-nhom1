@@ -16,7 +16,6 @@
 ### Frontend
 - React.js
 - Tailwing
-
 - 
 ## Cài Đặt và Chạy
 
