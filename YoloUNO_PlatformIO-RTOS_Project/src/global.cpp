@@ -1,20 +1,43 @@
 #include "global.h"
+
 float glob_temperature = 0;
 float glob_humidity = 0;
 float glob_light = 0;
+float glob_moisture =0;
+
+volatile float temp_temperature = 0.0f;
+volatile float temp_humidity = 0.0f;
+volatile int temp_light = 0;
+volatile float temp_moisture = 0.0f;
+
+
+
+volatile int glob_fan_cmd = 0;
+volatile int glob_led_cmd = 0;
+volatile int glob_maybom_cmd = 0;
+
+
+
 int chu_ky = 10;
 
+// ===== Adafruit IO config =====
+const char* AIO_SERVER = "io.adafruit.com";
+const int mqttPort = 1883;
 
-// ================== CẤU HÌNH ADAFRUIT IO ==================
-const char* AIO_SERVER   = "io.adafruit.com";
-const int   mqttPort     = 1883;    
-
-String ssid = "ESP32-nhom1-l06!!!";
+// ===== AP mode / local config =====
+String ssid = "dadn-nhom24";
 String password = "12345678";
-// String wifi_ssid = "ACLAB";
-// String wifi_password= "ACLAB2023";
-String wifi_ssid = "BACH YEN";
-String wifi_password= "TU0918289939";
+
+// ===== WiFi station config =====
+String wifi_ssid = "Bach Yen";
+String wifi_password = "Tu0918289939";
+
 boolean isWifiConnected = false;
 SemaphoreHandle_t xBinarySemaphoreInternet = xSemaphoreCreateBinary();
 
+void init(){
+    temp_temperature = 0;
+    temp_humidity = 0;
+    temp_light = 0;
+    temp_moisture = 0;
+}

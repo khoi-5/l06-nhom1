@@ -19,6 +19,7 @@ String settingsPage();
 void startAP();
 void setupServer();
 void connectToWiFi();
+bool tryStoredWiFi(uint32_t timeout_ms = 10000);
 
 void main_server_task(void *pvParameters);
 

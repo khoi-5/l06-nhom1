@@ -460,16 +460,24 @@ void handleSettings() {
 void handleConnect() {
   Serial.println("HTTP /connect");
   Serial.println(" ");
-  wifi_ssid     = server.arg("ssid");
+
+  if (!server.hasArg("ssid")) {
+    server.send(400, "text/plain", "Thieu SSID!");
+    return;
+  }
+
+  wifi_ssid = server.arg("ssid");
   wifi_password = server.arg("pass");
 
-  server.send(200, "text/plain", "Connecting....");
-  isAPMode       = false;
-  connecting     = true;
-  connect_start_ms = millis();
+  server.send(200, "text/plain", "Dang thu ket noi WiFi...");
 
-  connectToWiFi(); // bắt đầu connect STA
+  connecting = true;
+  connect_start_ms = millis();
+  isWifiConnected = false;
+
+  connectToWiFi();
 }
+
 
 // ================== WiFi & Server ==================
 
@@ -503,13 +511,52 @@ void startAP() {
 }
 
 void connectToWiFi() {
+  // Giu AP de user van vao duoc web trong luc thu ket noi WiFi that
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
+
+  Serial.print("Connecting to: ");
+  Serial.println(wifi_ssid);
+  Serial.println(" ");
+}
+
+bool tryStoredWiFi(uint32_t timeout_ms ) {
+  if (wifi_ssid.length() == 0) {
+    Serial.println("No stored WiFi -> start AP");
+    return false;
+  }
+
+  Serial.print("Boot: trying stored WiFi: ");
+  Serial.println(wifi_ssid);
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
-  Serial.print("Connecting to: ");
-  Serial.print(wifi_ssid.c_str());
-  //Serial.print(" Password: ");
-  //Serial.println(wifi_password.c_str());
-  Serial.println(" ");
+
+  unsigned long startMs = millis();
+  while (millis() - startMs < timeout_ms) {
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("Stored WiFi connected");
+      Serial.print("STA IP: ");
+      Serial.println(WiFi.localIP());
+
+      isWifiConnected = true;
+      isAPMode = false;
+
+      if (xBinarySemaphoreInternet != NULL) {
+        xSemaphoreGive(xBinarySemaphoreInternet);
+      }
+
+      return true;
+    }
+    delay(300);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  Serial.println("Stored WiFi failed");
+  WiFi.disconnect(true);
+  isWifiConnected = false;
+  return false;
 }
 
 // ================== FreeRTOS Main Task ==================
@@ -519,50 +566,144 @@ void main_server_task(void *pvParameters) {
 
   pinMode(BOOT_PIN, INPUT_PULLUP);
 
-  startAP();
-  setupServer();
+  bool serverStarted = false;
+
+  // 1. thử WiFi đã lưu
+  if (!tryStoredWiFi(10000)) {
+    // 2. fail thì bật AP cho user nhập
+    startAP();
+    setupServer();
+    serverStarted = true;
+  }
 
   while (1) {
-    server.handleClient();
+    // Chỉ xử lý web khi thật sự cần
+    if ((isAPMode || connecting) && serverStarted) {
+      server.handleClient();
+    }
 
-    // BOOT Button -> về AP mode
+    // nhấn BOOT để quay lại AP mode
     if (digitalRead(BOOT_PIN) == LOW) {
       vTaskDelay(pdMS_TO_TICKS(100));
       if (digitalRead(BOOT_PIN) == LOW) {
-        if (!isAPMode) {
-          Serial.println("BOOT pressed -> back to AP");
-          Serial.println(" ");
-          startAP();
+        Serial.println("BOOT pressed -> back to AP");
+        WiFi.disconnect(true);
+        startAP();
+
+        if (!serverStarted) {
           setupServer();
+          serverStarted = true;
         }
       }
     }
 
-    // Logic STA mode
+    // nếu đang thử connect từ web
     if (connecting) {
       if (WiFi.status() == WL_CONNECTED) {
-        Serial.print("STA IP address: ");
+        Serial.println("WiFi connected successfully");
+        Serial.print("STA IP: ");
         Serial.println(WiFi.localIP());
-        Serial.println(" ");
+
         isWifiConnected = true;
+        connecting = false;
+        isAPMode = false;
 
         if (xBinarySemaphoreInternet != NULL) {
           xSemaphoreGive(xBinarySemaphoreInternet);
         }
 
-        isAPMode   = false;
-        connecting = false;
+        // tắt AP sau khi đã connect mạng thật
+        WiFi.softAPdisconnect(true);
+        WiFi.mode(WIFI_STA);
       }
-      else if (millis() - connect_start_ms > 10000) { // timeout 10s
-        Serial.println("WiFi connect failed! Back to AP.");
-        Serial.println(" ");
+      else if (millis() - connect_start_ms > 10000) {
+        Serial.println("WiFi failed -> fallback AP");
+
+        WiFi.disconnect(true);
         startAP();
-        setupServer();
+
         connecting = false;
         isWifiConnected = false;
+        isAPMode = true;
+
+        if (!serverStarted) {
+          setupServer();
+          serverStarted = true;
+        }
       }
     }
 
     vTaskDelay(pdMS_TO_TICKS(20));
   }
 }
+
+
+
+
+
+// void main_server_task(void *pvParameters) {
+//   (void) pvParameters;
+
+//   pinMode(BOOT_PIN, INPUT_PULLUP);
+
+//   startAP();
+//   setupServer();
+
+//   while (1) {
+//     server.handleClient();
+
+//     // Nhan nut BOOT -> quay ve AP mode
+//     if (digitalRead(BOOT_PIN) == LOW) {
+//       vTaskDelay(pdMS_TO_TICKS(100));
+//       if (digitalRead(BOOT_PIN) == LOW) {
+//         if (!isAPMode) {
+//           Serial.println("BOOT pressed -> back to AP");
+//           Serial.println(" ");
+
+//           WiFi.disconnect(true);
+//           startAP();
+//           setupServer();
+//         }
+//       }
+//     }
+
+//     // Dang thu ket noi WiFi
+//     if (connecting) {
+//       if (WiFi.status() == WL_CONNECTED) {
+//         Serial.print("STA IP address: ");
+//         Serial.println(WiFi.localIP());
+//         Serial.println(" ");
+
+//         isWifiConnected = true;
+
+//         if (xBinarySemaphoreInternet != NULL) {
+//           xSemaphoreGive(xBinarySemaphoreInternet);
+//         }
+
+//         // Neu muon ket noi thanh cong roi moi tat AP:
+//         WiFi.softAPdisconnect(true);
+//         WiFi.mode(WIFI_STA);
+
+//         isAPMode = false;
+//         connecting = false;
+
+//         Serial.println("WiFi connected successfully!");
+//         Serial.println(" ");
+//       }
+//       else if (millis() - connect_start_ms > 10000) {
+//         Serial.println("WiFi connect failed! Back to AP.");
+//         Serial.println(" ");
+
+//         WiFi.disconnect(true);
+//         startAP();
+//         setupServer();
+
+//         connecting = false;
+//         isWifiConnected = false;
+//         isAPMode = true;
+//       }
+//     }
+
+//     vTaskDelay(pdMS_TO_TICKS(20));
+//   }
+// }

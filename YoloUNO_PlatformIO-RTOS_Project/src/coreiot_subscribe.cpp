@@ -26,14 +26,27 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   // ===== LED1 ON/OFF (chuỗi "ON"/"OFF") =====
   if (t.endsWith("/" + String(FEED_LED))) {
-    pinMode(LED_PIN, OUTPUT);
-    if (msg == "ON" || msg == "1") {
-      digitalWrite(LED_PIN, HIGH);
-      Serial.println("LED1: ON");
+    // pinMode(LED_PIN, OUTPUT);
+    // if (msg == "ON" || msg == "1") {
+    //   digitalWrite(LED_PIN, HIGH);
+    //   Serial.println("LED1: ON");
+    //   Serial.print(" ");
+    // } else {
+    //   digitalWrite(LED_PIN, LOW);
+    //   Serial.println("LED1: OFF");
+    //   Serial.print(" ");
+    // }
+    int LEDCmd = msg.toInt();
+
+    if (LEDCmd == 0) {
+      glob_led_cmd = 0;
+      Serial.println("Received LED = OFF ");
+      Serial.println(glob_led_cmd);
       Serial.print(" ");
     } else {
-      digitalWrite(LED_PIN, LOW);
-      Serial.println("LED1: OFF");
+      glob_led_cmd = 1;
+      Serial.println("Received LED = ON ");
+      Serial.println(glob_led_cmd);
       Serial.print(" ");
     }
   }
@@ -116,13 +129,42 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       Serial.printf("New WiFi cfg -> SSID=%s\n", wifi_ssid.c_str());
       Serial.print(" ");
 
-      // 🔥 QUAN TRỌNG: dùng chung logic timeout 10s như HTTP /connect
+      //  QUAN TRỌNG: dùng chung logic timeout 10s như HTTP /connect
       isAPMode        = false;
       isWifiConnected = false;
       connecting      = true;
       connect_start_ms = millis();
 
       connectToWiFi();   // bắt đầu thử connect STA
+    }
+  }
+  
+  else if (t.endsWith("/" + String(FEED_FAN))) {
+    int fanCmd = msg.toInt();
+
+    if (fanCmd == 0) {
+      glob_fan_cmd = 0;
+      Serial.println("Received FAN = OFF");
+      Serial.print(" ");
+    } else {
+      glob_fan_cmd = 1;
+      Serial.println("Received FAN = ON");
+      Serial.print(" ");
+    }
+  }
+
+
+    else if (t.endsWith("/" + String(FEED_MAYBOM))) {
+    int MaybomCmd = msg.toInt();
+
+    if (MaybomCmd == 0) {
+      glob_maybom_cmd = 0;
+      Serial.println("Received MAYBOM = OFF");
+      Serial.print(" ");
+    } else {
+      glob_maybom_cmd = 1;
+      Serial.println("Received MAYBOM = ON");
+      Serial.print(" ");
     }
   }
 

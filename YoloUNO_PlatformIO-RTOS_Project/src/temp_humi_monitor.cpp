@@ -1,94 +1,131 @@
 #include "temp_humi_monitor.h"
+#include <math.h>
 
 DHT20 dht20;
-LiquidCrystal_I2C lcd(33,16,2);
 
-// từ chỗ khác
 extern float glob_temperature;
 extern float glob_humidity;
+extern int chu_ky;
 
-// hằng: chu kỳ lấy mẫu (giây)
-const uint32_t SAMPLE_PERIOD = COLLECTED_WAITING_TIME;  // = 5
+// lưu giá trị hợp lệ gần nhất
+float last_temperature = 0.0f;
+float last_humidity    = 0.0f;
 
-// Giả sử chu_ky max ~ 60s -> max 60 / 5 = 12 mẫu
-// Nếu sau này chu_ky lớn hơn thì tăng MAX_SAMPLES lên
-const int MAX_SAMPLES = 12;
-
-void temp_humi_monitor(void *pvParameters){
-
+void temp_humi_monitor(void *pvParameters) {
     Wire.begin(11, 12);
-    Serial.begin(115200);
     dht20.begin();
 
-    float tempBuf[MAX_SAMPLES]  = {0};
-    float humidBuf[MAX_SAMPLES] = {0};
-    int idx    = 0;   // vị trí ghi tiếp theo (0..MAX_SAMPLES-1)
-    int filled = 0;   // số mẫu hiện có
+    const uint32_t SAMPLE_PERIOD_SEC = 1;
 
-    while (1){
-        // ===== 1. Đọc cảm biến =====
+    float sumTemp = 0.0f;
+    float sumHumi = 0.0f;
+    int sampleCount = 0;
+
+    while (1) {
         dht20.read();
-        float temperature = dht20.getTemperature();
-        float humidity    = dht20.getHumidity();
 
-        if (isnan(temperature) || isnan(humidity)) {
-            Serial.println("Failed to read from DHT sensor!");
-            temperature = humidity = -1;
-        }
+        float rawTemperature = dht20.getTemperature();
+        float rawHumidity    = dht20.getHumidity();
 
-        // ===== 2. Ghi vào buffer vòng tròn =====
-        tempBuf[idx]  = temperature;
-        humidBuf[idx] = humidity;
-        idx = (idx + 1) % MAX_SAMPLES;
-        if (filled < MAX_SAMPLES) filled++;
+        bool missData = isnan(rawTemperature) || isnan(rawHumidity);
 
-        // ===== 3. Số mẫu cần để tính average = chu_ky / 5 =====
-        int windowSamples = chu_ky / SAMPLE_PERIOD;   // đảm bảo nguyên vì chu_ky là bội số 5
+        float validTemperature;
+        float validHumidity;
 
-        // Lúc mới chạy có thể chưa đủ windowSamples mẫu → lấy bấy nhiêu mẫu đang có
-        if (windowSamples > filled) {
-            windowSamples = filled;
-        }
+        String tempStatus;
+        String humiStatus;
 
-        // Tránh chia cho 0 khi vừa khởi động (chưa có mẫu nào hợp lệ)
-        if (windowSamples > 0) {
-            // ===== 4. Tính trung bình windowSamples mẫu gần nhất =====
-            float sumT = 0.0f;
-            float sumH = 0.0f;
+        if (missData) {
+            validTemperature = last_temperature;
+            validHumidity    = last_humidity;
 
-            for (int i = 0; i < windowSamples; i++) {
-                int j = (idx - 1 - i + MAX_SAMPLES) % MAX_SAMPLES; // lùi ngược từ mẫu mới nhất
-                sumT += tempBuf[j];
-                sumH += humidBuf[j];
+            tempStatus = "MISS -> use last";
+            humiStatus = "MISS -> use last";
+        } else {
+            // clamp nhiệt độ theo spec: -40 ~ 80
+            if (rawTemperature < -40.0f) {
+                validTemperature = -40.0f;
+                tempStatus = "CLAMP LOW";
+            } else if (rawTemperature > 80.0f) {
+                validTemperature = 80.0f;
+                tempStatus = "CLAMP HIGH";
+            } else {
+                validTemperature = rawTemperature;
+                tempStatus = "OK";
             }
 
-            float avgTemp  = sumT / windowSamples;
-            float avgHumid = sumH / windowSamples;
+            // clamp độ ẩm theo spec: 0 ~ 100
+            if (rawHumidity < 0.0f) {
+                validHumidity = 0.0f;
+                humiStatus = "CLAMP LOW";
+            } else if (rawHumidity > 100.0f) {
+                validHumidity = 100.0f;
+                humiStatus = "CLAMP HIGH";
+            } else {
+                validHumidity = rawHumidity;
+                humiStatus = "OK";
+            }
 
-            // ===== 5. Làm tròn 2 chữ số thập phân =====
-            avgTemp  = roundf(avgTemp  * 100.0f) / 100.0f;
-            avgHumid = roundf(avgHumid * 100.0f) / 100.0f;
-
-            // ===== 6. Cập nhật biến global: coreiot_task sẽ publish giá trị này =====
-            glob_temperature = avgTemp;
-            glob_humidity    = avgHumid;
-
-            // Debug
-            Serial.print("RAW -> H: ");
-            Serial.print(humidity);
-            Serial.print("%  T: ");
-            Serial.print(temperature);
-            Serial.print("°C | AVG(");
-            Serial.print(windowSamples);
-            Serial.print(" samples) -> H: ");
-            Serial.print(avgHumid);
-            Serial.print("%  T: ");
-            Serial.print(avgTemp);
-            Serial.println("°C");
-            Serial.println(" ");
+            last_temperature = validTemperature;
+            last_humidity    = validHumidity;
         }
 
-        // ===== 7. Đợi 5s rồi đọc tiếp =====
-        vTaskDelay(pdMS_TO_TICKS(SAMPLE_PERIOD * 1000));
+        // Debug log mỗi lần đọc
+        // Serial.println(
+        //     "[DHT20] rawT=" + String(rawTemperature, 2) +
+        //     " | validT=" + String(validTemperature, 2) +
+        //     " | lastT=" + String(last_temperature, 2) +
+        //     " | tempStatus=" + tempStatus +
+        //     " || rawH=" + String(rawHumidity, 2) +
+        //     " | validH=" + String(validHumidity, 2) +
+        //     " | lastH=" + String(last_humidity, 2) +
+        //     " | humiStatus=" + humiStatus
+        // );
+
+        sumTemp += validTemperature;
+        sumHumi += validHumidity;
+        sampleCount++;
+
+        if (sampleCount >= chu_ky) {
+            float avgTemp = 0.0f;
+            float avgHumi = 0.0f;
+
+            if (sampleCount > 0) {
+                avgTemp = sumTemp / sampleCount;
+                avgHumi = sumHumi / sampleCount;
+            }
+
+            avgTemp = roundf(avgTemp * 100.0f) / 100.0f;
+            avgHumi = roundf(avgHumi * 100.0f) / 100.0f;
+
+            glob_temperature = avgTemp;
+            glob_humidity    = avgHumi;
+
+            // Debug log cuối chu kỳ
+            // Serial.println("===== TEMP/HUMI PERIOD DONE =====");
+            // Serial.print("Period: ");
+            // Serial.print(chu_ky);
+            // Serial.println(" s");
+
+            // Serial.print("Samples: ");
+            // Serial.println(sampleCount);
+
+            // Serial.print("Average Temperature: ");
+            // Serial.print(avgTemp, 2);
+            // Serial.println(" C");
+
+            // Serial.print("Average Humidity: ");
+            // Serial.print(avgHumi, 2);
+            // Serial.println(" %RH");
+
+            // Serial.println("=================================");
+            // Serial.println();
+
+            sumTemp = 0.0f;
+            sumHumi = 0.0f;
+            sampleCount = 0;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(SAMPLE_PERIOD_SEC * 1000));
     }
 }

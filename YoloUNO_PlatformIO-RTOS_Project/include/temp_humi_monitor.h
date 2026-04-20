@@ -4,7 +4,8 @@
 #include "LiquidCrystal_I2C.h"
 #include "DHT20.h"
 #include "global.h"
-
+extern float last_temperature;
+extern float last_humidity;
 void temp_humi_monitor(void *pvParameters);
 
 
