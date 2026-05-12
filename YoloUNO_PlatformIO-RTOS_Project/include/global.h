@@ -24,6 +24,8 @@ extern volatile int glob_fan_cmd;
 extern volatile int glob_led_cmd;
 extern volatile int glob_maybom_cmd;
 
+extern volatile int phantram;
+
 // ===== Adafruit IO config =====
 extern const char* AIO_SERVER;
 extern const int mqttPort;

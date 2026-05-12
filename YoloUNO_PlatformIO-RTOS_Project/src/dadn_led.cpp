@@ -3,10 +3,26 @@
 
 #define LED_PIN 8
 #define LED_COUNT 4
+#define LIGHT_THRESHOLD 500
 
 extern volatile int glob_led_cmd;
+extern float glob_light;
 
 Adafruit_NeoPixel ledStrip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+void led_on() {
+    for (int i = 0; i < LED_COUNT; i++) {
+        ledStrip.setPixelColor(i, ledStrip.Color(255, 0, 0)); // đỏ
+    }
+    ledStrip.show();
+    Serial.println("LED ON");
+}
+
+void led_off() {
+    ledStrip.clear();
+    ledStrip.show();
+    Serial.println("LED OFF");
+}
 
 void led_control_task(void *pvParameters) {
     ledStrip.begin();
@@ -14,27 +30,32 @@ void led_control_task(void *pvParameters) {
     ledStrip.show();
 
     int lastState = -1;
-    if (glob_led_cmd == 1) Serial.println("nhan dc tin hieu trung ===============");
+
+    // an toàn lúc mới khởi động
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
     while (1) {
-        int cmd = glob_led_cmd;
+        int currentState = 0;
 
-        if (cmd != lastState) {
+        // Ưu tiên lệnh tay
+        if (glob_led_cmd == 1) {
+            currentState = 1;
+        }
+        // Auto chỉ bật khi cảm biến ánh sáng đã có giá trị hợp lệ
+        else if (glob_light > 0 && glob_light < LIGHT_THRESHOLD) {
+            currentState = 1;
+        }
+        else {
+            currentState = 0;
+        }
 
-            if (cmd == 0) {
-                // 🔴 Tắt LED
-                ledStrip.clear();
-                ledStrip.show();
-                Serial.println("LED OFF");
+        if (currentState != lastState) {
+            if (currentState == 1) {
+                led_on();
             } else {
-                // 🟢 Bật LED (màu đỏ)
-                for (int i = 0; i < LED_COUNT; i++) {
-                    ledStrip.setPixelColor(i, ledStrip.Color(255, 0, 0));
-                }
-                ledStrip.show();
-                Serial.println("LED ON (RED)");
+                led_off();
             }
-
-            lastState = cmd;
+            lastState = currentState;
         }
 
         vTaskDelay(pdMS_TO_TICKS(100));

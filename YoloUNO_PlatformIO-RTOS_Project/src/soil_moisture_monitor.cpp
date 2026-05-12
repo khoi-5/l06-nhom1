@@ -3,7 +3,6 @@
 
 extern float glob_moisture;
 extern int chu_ky;
-extern volatile float temp_moisture;  // giống temp_light
 
 void soil_moisture_monitor(void *pvParameters) {
 
@@ -17,70 +16,40 @@ void soil_moisture_monitor(void *pvParameters) {
 
     while (1) {
 
+        // Đọc giá trị analog 0–4095
         int raw = analogRead(SOIL_SENSOR_PIN);
 
-        // convert 0–4095 → 0–100 (%)
-        float rawMoisture = (1.0f - (float)raw / 4095.0f) * 100.0f;
+        // Đổi analog 0–4095 sang phần trăm 0–100%
+        float moisture = ((float)raw / 4095.0f) * 100.0f;
 
-        bool missData = false;  // bạn có thể nâng cấp sau
-
-        float validMoisture;
-        String status;
-
-        if (missData) {
-            validMoisture = temp_moisture;
-            status = "MISS -> use temp";
-        } else {
-            // clamp theo spec 0–100%
-            if (rawMoisture < 0.0f) {
-                validMoisture = 0.0f;
-                status = "CLAMP LOW";
-            } else if (rawMoisture > 100.0f) {
-                validMoisture = 100.0f;
-                status = "CLAMP HIGH";
-            } else {
-                validMoisture = rawMoisture;
-                status = "OK";
-            }
-
-            temp_moisture = validMoisture;
+        // Giới hạn về 0–100% cho chắc
+        if (moisture < 0.0f) {
+            moisture = 0.0f;
+        } else if (moisture > 100.0f) {
+            moisture = 100.0f;
         }
 
-        //  Debug mỗi lần đọc
-        // Serial.println(
-        //     "[SOIL] raw=" + String(raw) +
-        //     " | rawMoist=" + String(rawMoisture, 2) +
-        //     " | valid=" + String(validMoisture, 2) +
-        //     " | temp=" + String(temp_moisture, 2) +
-        //     " | status=" + status
-        // );
-
-        sum += validMoisture;
+        // Cộng vào để tính trung bình
+        sum += moisture;
         count++;
         elapsed += SAMPLE_PERIOD_SEC;
 
+        // Đủ chu kỳ thì cập nhật giá trị trung bình
         if (elapsed >= chu_ky) {
-            float avg = (count > 0) ? sum / count : 0.0f;
+            float avg = (count > 0) ? (sum / count) : 0.0f;
 
+            // Làm tròn 2 chữ số thập phân
             avg = roundf(avg * 100.0f) / 100.0f;
+
             glob_moisture = avg;
 
-            //  Debug cuối chu kỳ
-            // Serial.println("===== SOIL PERIOD DONE =====");
-            // Serial.print("Period: ");
-            // Serial.print(chu_ky);
-            // Serial.println(" s");
+            Serial.print("[SOIL] raw=");
+            Serial.print(raw);
+            Serial.print(" | avg moisture=");
+            Serial.print(glob_moisture, 2);
+            Serial.println("%");
 
-            // Serial.print("Samples: ");
-            // Serial.println(count);
-
-            // Serial.print("Average Moisture: ");
-            // Serial.print(avg, 2);
-            // Serial.println(" %");
-
-            // Serial.println("============================");
-            // Serial.println();
-
+            // Reset bộ đếm chu kỳ
             sum = 0.0f;
             count = 0;
             elapsed = 0;

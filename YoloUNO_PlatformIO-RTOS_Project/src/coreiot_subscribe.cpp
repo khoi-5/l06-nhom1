@@ -168,4 +168,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     }
   }
 
+    else if (t.endsWith("/" + String(FEED_PHANTRAM))) {
+        phantram = msg.toInt();
+
+        if (phantram < 0) phantram = 0;
+        if (phantram > 100) phantram = 100;
+
+        Serial.print("Received PHANTRAM = ");
+        Serial.println(phantram);
+    }
+
 }

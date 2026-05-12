@@ -150,6 +150,7 @@ const char* FEED_CYCLE      = "chu-ky";
 
 const char* FEED_FAN        = "dadn.fan";
 const char* FEED_MAYBOM     = "dadn.maybom";
+const char* FEED_PHANTRAM = "dadn.phantram";
 
 // ================== MQTT CLIENT ==================
 WiFiClient espClient;
@@ -175,6 +176,7 @@ String topicCycle     = baseTopic + FEED_CYCLE;
 
 String topicFan       = baseTopic + FEED_FAN;
 String topicMaybom    = baseTopic + FEED_MAYBOM;
+String topicPHANTRAM  = baseTopic + FEED_PHANTRAM;
 
 // ================== TRẠNG THÁI CONTROL ==================
 bool g_lightEnable    = true;
@@ -201,6 +203,7 @@ void reconnect() {
       client.subscribe(topicLed.c_str());
       client.subscribe(topicFan.c_str());
       client.subscribe(topicMaybom.c_str());
+      // client.subscribe(topicPHANTRAM.c_str());
 
       Serial.print("Subscribed: "); Serial.println(topicLed);
       Serial.print("Subscribed: "); Serial.println(topicFan);

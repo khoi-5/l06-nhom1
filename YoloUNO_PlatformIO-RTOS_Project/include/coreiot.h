@@ -135,6 +135,7 @@ extern const char* FEED_CYCLE;
 
 extern const char* FEED_FAN;
 extern const char* FEED_MAYBOM;
+extern const char* FEED_PHANTRAM;
 
 // ===== MQTT client dùng chung =====
 extern WiFiClient espClient;
@@ -160,6 +161,7 @@ extern String topicCycle;
 
 extern String topicFan;
 extern String topicMaybom;
+extern String topicPHANTRAM;
 
 // ===== Trạng thái control dùng chung =====
 extern bool g_lightEnable;

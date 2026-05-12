@@ -16,6 +16,8 @@ volatile int glob_fan_cmd = 0;
 volatile int glob_led_cmd = 0;
 volatile int glob_maybom_cmd = 0;
 
+volatile int phantram = 10;
+
 
 
 int chu_ky = 10;
@@ -29,8 +31,8 @@ String ssid = "dadn-nhom24";
 String password = "12345678";
 
 // ===== WiFi station config =====
-String wifi_ssid = "Bach Yen";
-String wifi_password = "Tu0918289939";
+String wifi_ssid = "701H6-KH&KTMT";
+String wifi_password = "svkhktmt";
 
 boolean isWifiConnected = false;
 SemaphoreHandle_t xBinarySemaphoreInternet = xSemaphoreCreateBinary();

@@ -11,6 +11,7 @@
 #include "coreiot.h"
 #include "fan_control.h"
 #include "dadn_led.h"
+#include "maybom.h"
 
 
 void setup() {
@@ -21,7 +22,8 @@ void setup() {
   xTaskCreate(soil_moisture_monitor, "Task soil moisture Monitor" ,2048  ,NULL  ,2 , NULL);
   xTaskCreate(lcd_display_task, "Task LCD Display", 4096, NULL, 1, NULL);
   xTaskCreate(fan_control_task, "Task FAN Control", 2048, NULL, 2, NULL);
-  xTaskCreate(led_control_task, "Task FAN Control", 2048, NULL, 2, NULL);
+  xTaskCreate(led_control_task, "Task LED Control", 2048, NULL, 2, NULL);
+  xTaskCreate(maybom_control_task, "Task MAYBOM Control", 2048, NULL, 2, NULL);
   xTaskCreate(main_server_task, "Task Main Server" ,8192  ,NULL  ,2 , NULL);
   xTaskCreate(coreiot_task, "CoreIOT Task" ,4096  ,NULL  ,2 , NULL);
 }
