@@ -11,7 +11,7 @@ extern float glob_moisture;
 // ở chỗ khác đã có
 extern int chu_ky;
 
-// ================== TASK CHÍNH GỬI/POLL MQTT ==================
+// ================== TASK CHÍNH GỬI/POLL ==================
 void coreiot_task(void *pvParameters) {
   setup_coreiot();
 
@@ -81,7 +81,7 @@ void coreiot_task(void *pvParameters) {
       // }
 
       // ===== Debug Serial =====
-      // Serial.println("===== MQTT PUBLISH =====");
+      // Serial.println("==== PUBLISH =====");
 
       // Serial.print("TEMP     -> ");
       // Serial.print(tempStr);

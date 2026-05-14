@@ -305,9 +305,7 @@ String settingsPage() {
       <div class="column">
         <h2>Chu kỳ gửi lên CoreIOT</h2>
         <select id="cycle">
-          <option value="5000">5 giây</option>
           <option value="10000">10 giây (mặc định)</option>
-          <option value="15000">15 giây</option>
           <option value="30000">30 giây</option>
           <option value="60000">60 giây</option>
         </select>
@@ -639,71 +637,3 @@ void main_server_task(void *pvParameters) {
 
 
 
-
-
-// void main_server_task(void *pvParameters) {
-//   (void) pvParameters;
-
-//   pinMode(BOOT_PIN, INPUT_PULLUP);
-
-//   startAP();
-//   setupServer();
-
-//   while (1) {
-//     server.handleClient();
-
-//     // Nhan nut BOOT -> quay ve AP mode
-//     if (digitalRead(BOOT_PIN) == LOW) {
-//       vTaskDelay(pdMS_TO_TICKS(100));
-//       if (digitalRead(BOOT_PIN) == LOW) {
-//         if (!isAPMode) {
-//           Serial.println("BOOT pressed -> back to AP");
-//           Serial.println(" ");
-
-//           WiFi.disconnect(true);
-//           startAP();
-//           setupServer();
-//         }
-//       }
-//     }
-
-//     // Dang thu ket noi WiFi
-//     if (connecting) {
-//       if (WiFi.status() == WL_CONNECTED) {
-//         Serial.print("STA IP address: ");
-//         Serial.println(WiFi.localIP());
-//         Serial.println(" ");
-
-//         isWifiConnected = true;
-
-//         if (xBinarySemaphoreInternet != NULL) {
-//           xSemaphoreGive(xBinarySemaphoreInternet);
-//         }
-
-//         // Neu muon ket noi thanh cong roi moi tat AP:
-//         WiFi.softAPdisconnect(true);
-//         WiFi.mode(WIFI_STA);
-
-//         isAPMode = false;
-//         connecting = false;
-
-//         Serial.println("WiFi connected successfully!");
-//         Serial.println(" ");
-//       }
-//       else if (millis() - connect_start_ms > 10000) {
-//         Serial.println("WiFi connect failed! Back to AP.");
-//         Serial.println(" ");
-
-//         WiFi.disconnect(true);
-//         startAP();
-//         setupServer();
-
-//         connecting = false;
-//         isWifiConnected = false;
-//         isAPMode = true;
-//       }
-//     }
-
-//     vTaskDelay(pdMS_TO_TICKS(20));
-//   }
-// }

@@ -1,7 +1,7 @@
 #include "coreiot.h"
 #include <ArduinoJson.h>
 
-// ================== CALLBACK NHẬN TIN MQTT ==================
+// ================== CALLBACK NHẬN TIN ==================
 extern bool g_lightEnable;
 extern bool g_tempEnable;
 extern bool g_humidEnable;
@@ -20,7 +20,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   String t = String(topic);
 
-  Serial.print("MQTT msg ["); Serial.print(t); Serial.print("] ");
+  Serial.print(" msg ["); Serial.print(t); Serial.print("] ");
   Serial.println(msg);
   Serial.print(" ");
 
