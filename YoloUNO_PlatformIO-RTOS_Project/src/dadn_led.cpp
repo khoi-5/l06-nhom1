@@ -31,22 +31,27 @@ void led_control_task(void *pvParameters) {
 
     int lastState = -1;
 
-    // an toàn lúc mới khởi động
+    // An toàn lúc mới khởi động
     vTaskDelay(pdMS_TO_TICKS(1000));
 
     while (1) {
         int currentState = 0;
 
-        // Ưu tiên lệnh tay
         if (glob_led_cmd == 1) {
+            // Bật thủ công
             currentState = 1;
         }
-        // Auto chỉ bật khi cảm biến ánh sáng đã có giá trị hợp lệ
-        else if (glob_light > 0 && glob_light < LIGHT_THRESHOLD) {
-            currentState = 1;
+        else if (glob_led_cmd == 0) {
+            // Tắt thủ công
+            currentState = 0;
         }
         else {
-            currentState = 0;
+            // Tự động theo ánh sáng
+            if (glob_light > 0 && glob_light < LIGHT_THRESHOLD) {
+                currentState = 1;
+            } else {
+                currentState = 0;
+            }
         }
 
         if (currentState != lastState) {
@@ -55,6 +60,7 @@ void led_control_task(void *pvParameters) {
             } else {
                 led_off();
             }
+
             lastState = currentState;
         }
 

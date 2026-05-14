@@ -7,123 +7,57 @@ extern float glob_temperature;
 extern float glob_humidity;
 extern int chu_ky;
 
-// lưu giá trị hợp lệ gần nhất
-float last_temperature = 0.0f;
-float last_humidity    = 0.0f;
-
 void temp_humi_monitor(void *pvParameters) {
     Wire.begin(11, 12);
     dht20.begin();
 
     const uint32_t SAMPLE_PERIOD_SEC = 1;
 
-    float sumTemp = 0.0f;
-    float sumHumi = 0.0f;
-    int sampleCount = 0;
+    float sum_Temp = 0.0f;
+    float sum_Humi = 0.0f;
+    int count = 0;
 
     while (1) {
         dht20.read();
 
-        float rawTemperature = dht20.getTemperature();
-        float rawHumidity    = dht20.getHumidity();
+        float temperature = dht20.getTemperature();
+        float humidity = dht20.getHumidity();
 
-        bool missData = isnan(rawTemperature) || isnan(rawHumidity);
+        // Nếu đọc lỗi NaN thì bỏ qua mẫu này
+        if (!isnan(temperature) && !isnan(humidity)) {
 
-        float validTemperature;
-        float validHumidity;
-
-        String tempStatus;
-        String humiStatus;
-
-        if (missData) {
-            validTemperature = last_temperature;
-            validHumidity    = last_humidity;
-
-            tempStatus = "MISS -> use last";
-            humiStatus = "MISS -> use last";
-        } else {
-            // clamp nhiệt độ theo spec: -40 ~ 80
-            if (rawTemperature < -40.0f) {
-                validTemperature = -40.0f;
-                tempStatus = "CLAMP LOW";
-            } else if (rawTemperature > 80.0f) {
-                validTemperature = 80.0f;
-                tempStatus = "CLAMP HIGH";
-            } else {
-                validTemperature = rawTemperature;
-                tempStatus = "OK";
+            // Giới hạn nhiệt độ theo ngưỡng DHT20: -40 đến 80 độ C
+            if (temperature < -40.0f) {
+                temperature = -40.0f;
+            } else if (temperature > 80.0f) {
+                temperature = 80.0f;
             }
 
-            // clamp độ ẩm theo spec: 0 ~ 100
-            if (rawHumidity < 0.0f) {
-                validHumidity = 0.0f;
-                humiStatus = "CLAMP LOW";
-            } else if (rawHumidity > 100.0f) {
-                validHumidity = 100.0f;
-                humiStatus = "CLAMP HIGH";
-            } else {
-                validHumidity = rawHumidity;
-                humiStatus = "OK";
+            // Giới hạn độ ẩm theo ngưỡng: 0 đến 100%
+            if (humidity < 0.0f) {
+                humidity = 0.0f;
+            } else if (humidity > 100.0f) {
+                humidity = 100.0f;
             }
 
-            last_temperature = validTemperature;
-            last_humidity    = validHumidity;
+            sum_Temp += temperature;
+            sum_Humi += humidity;
+            count += 1;
         }
 
-        // Debug log mỗi lần đọc
-        // Serial.println(
-        //     "[DHT20] rawT=" + String(rawTemperature, 2) +
-        //     " | validT=" + String(validTemperature, 2) +
-        //     " | lastT=" + String(last_temperature, 2) +
-        //     " | tempStatus=" + tempStatus +
-        //     " || rawH=" + String(rawHumidity, 2) +
-        //     " | validH=" + String(validHumidity, 2) +
-        //     " | lastH=" + String(last_humidity, 2) +
-        //     " | humiStatus=" + humiStatus
-        // );
+        if (count >= chu_ky) {
+            float avg_Temp = sum_Temp / count;
+            float avg_Humi = sum_Humi / count;
 
-        sumTemp += validTemperature;
-        sumHumi += validHumidity;
-        sampleCount++;
+            avg_Temp = roundf(avg_Temp * 100.0f) / 100.0f;
+            avg_Humi = roundf(avg_Humi * 100.0f) / 100.0f;
 
-        if (sampleCount >= chu_ky) {
-            float avgTemp = 0.0f;
-            float avgHumi = 0.0f;
+            glob_temperature = avg_Temp;
+            glob_humidity = avg_Humi;
 
-            if (sampleCount > 0) {
-                avgTemp = sumTemp / sampleCount;
-                avgHumi = sumHumi / sampleCount;
-            }
-
-            avgTemp = roundf(avgTemp * 100.0f) / 100.0f;
-            avgHumi = roundf(avgHumi * 100.0f) / 100.0f;
-
-            glob_temperature = avgTemp;
-            glob_humidity    = avgHumi;
-
-            // Debug log cuối chu kỳ
-            // Serial.println("===== TEMP/HUMI PERIOD DONE =====");
-            // Serial.print("Period: ");
-            // Serial.print(chu_ky);
-            // Serial.println(" s");
-
-            // Serial.print("Samples: ");
-            // Serial.println(sampleCount);
-
-            // Serial.print("Average Temperature: ");
-            // Serial.print(avgTemp, 2);
-            // Serial.println(" C");
-
-            // Serial.print("Average Humidity: ");
-            // Serial.print(avgHumi, 2);
-            // Serial.println(" %RH");
-
-            // Serial.println("=================================");
-            // Serial.println();
-
-            sumTemp = 0.0f;
-            sumHumi = 0.0f;
-            sampleCount = 0;
+            sum_Temp = 0.0f;
+            sum_Humi = 0.0f;
+            count = 0;
         }
 
         vTaskDelay(pdMS_TO_TICKS(SAMPLE_PERIOD_SEC * 1000));

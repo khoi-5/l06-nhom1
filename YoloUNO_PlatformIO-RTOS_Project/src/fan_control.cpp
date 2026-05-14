@@ -2,13 +2,14 @@
 #include <Adafruit_NeoPixel.h>
 
 #define FAN_PIN 6
+#define FAN_LED_PIN 7
 #define LED_COUNT 4
-#define LIGHT_THRESHOLD 500
+#define TEMP_THRESHOLD 35
 
 extern volatile int glob_fan_cmd;
-extern float glob_light;
+extern float glob_temperature;
 
-Adafruit_NeoPixel fanStrip(LED_COUNT, FAN_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel fanStrip(LED_COUNT, FAN_LED_PIN, NEO_GRB + NEO_KHZ800);
 
 void fan_on() {
     int pwm = map(70, 0, 100, 0, 255);
@@ -26,13 +27,11 @@ void fan_led_on() {
         fanStrip.setPixelColor(i, fanStrip.Color(0, 0, 255));
     }
     fanStrip.show();
-    Serial.println("FAN LED ON");
 }
 
 void fan_led_off() {
     fanStrip.clear();
     fanStrip.show();
-    Serial.println("FAN LED OFF");
 }
 
 void fan_control_task(void *pvParameters) {
@@ -52,7 +51,7 @@ void fan_control_task(void *pvParameters) {
         if (glob_fan_cmd == 1) {
             currentState = 1;
         } else {
-            if (glob_temperature > 35) {
+            if (glob_temperature > TEMP_THRESHOLD) {
                 currentState = 1;
             } else {
                 currentState = 0;
@@ -67,6 +66,7 @@ void fan_control_task(void *pvParameters) {
                 fan_off();
                 // fan_led_off();
             }
+
             lastState = currentState;
         }
 

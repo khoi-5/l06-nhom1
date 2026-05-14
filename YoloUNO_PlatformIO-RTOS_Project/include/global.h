@@ -18,8 +18,6 @@ extern volatile int temp_light;
 extern volatile float temp_moisture;
 
 
-
-
 extern volatile int glob_fan_cmd;
 extern volatile int glob_led_cmd;
 extern volatile int glob_maybom_cmd;

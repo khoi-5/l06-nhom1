@@ -2,15 +2,16 @@
 #include <Adafruit_NeoPixel.h>
 
 #define MAYBOM_PIN 10
+#define MAYBOM_LED_PIN 9
 #define LED_COUNT 4
-#define LIGHT_THRESHOLD 500
 #define MAYBOM_PERIOD_MS 1000
+#define MOISTURE_THRESHOLD 10
 
 extern volatile int glob_maybom_cmd;
-extern float glob_light;
 extern volatile int phantram;
+extern float glob_moisture;
 
-Adafruit_NeoPixel maybomStrip(LED_COUNT, MAYBOM_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel maybomStrip(LED_COUNT, MAYBOM_LED_PIN, NEO_GRB + NEO_KHZ800);
 
 int maybom_percent = 20;
 
@@ -67,19 +68,29 @@ void maybom_control_task(void *pvParameters) {
     vTaskDelay(pdMS_TO_TICKS(1000));
 
     while (1) {
-        int currentState;
+        int currentState = 0;
 
         // maybom_percent = phantram;
-        maybom_percent = 15;
+        maybom_percent = 20;
 
-        if (maybom_percent < 0) maybom_percent = 0;
-        if (maybom_percent > 100) maybom_percent = 100;
+        if (maybom_percent < 0) {
+            maybom_percent = 0;
+        }
+        if (maybom_percent > 100) {
+            maybom_percent = 100;
+        }
 
         if (glob_maybom_cmd == 1) {
+            // Bật thủ công
             currentState = 1;
-        } else {
-            // độ ẩm nhỏ hơn 30
-            if (glob_moisture < 30) {
+        }
+        else if (glob_maybom_cmd == 0) {
+            // Tắt thủ công
+            currentState = 0;
+        }
+        else {
+            // Tự động theo độ ẩm đất
+            if (glob_moisture < MOISTURE_THRESHOLD) {
                 currentState = 1;
             } else {
                 currentState = 0;
@@ -87,9 +98,11 @@ void maybom_control_task(void *pvParameters) {
         }
 
         if (currentState == 1) {
+            maybom_led_on();
             maybom_run_percent(maybom_percent);
         } else {
             maybom_off();
+            maybom_led_off();
             vTaskDelay(pdMS_TO_TICKS(100));
         }
     }

@@ -12,9 +12,9 @@ volatile float temp_moisture = 0.0f;
 
 
 
-volatile int glob_fan_cmd = 0;
-volatile int glob_led_cmd = 0;
-volatile int glob_maybom_cmd = 0;
+volatile int glob_fan_cmd = -1;
+volatile int glob_led_cmd = -1;
+volatile int glob_maybom_cmd = -1;
 
 volatile int phantram = 10;
 

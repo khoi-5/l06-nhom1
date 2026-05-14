@@ -26,27 +26,30 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   // ===== LED1 ON/OFF (chuỗi "ON"/"OFF") =====
   if (t.endsWith("/" + String(FEED_LED))) {
-    // pinMode(LED_PIN, OUTPUT);
-    // if (msg == "ON" || msg == "1") {
-    //   digitalWrite(LED_PIN, HIGH);
-    //   Serial.println("LED1: ON");
-    //   Serial.print(" ");
-    // } else {
-    //   digitalWrite(LED_PIN, LOW);
-    //   Serial.println("LED1: OFF");
-    //   Serial.print(" ");
-    // }
-    int LEDCmd = msg.toInt();
+    msg.trim();
+    msg.toUpperCase();
 
-    if (LEDCmd == 0) {
-      glob_led_cmd = 0;
-      Serial.println("Received LED = OFF ");
+    if (msg == "AUTO" || msg == "-1") {
+      glob_led_cmd = -1;
+      Serial.println("Received LED = AUTO");
       Serial.println(glob_led_cmd);
       Serial.print(" ");
-    } else {
-      glob_led_cmd = 1;
-      Serial.println("Received LED = ON ");
+    }
+    else if (msg == "OFF" || msg == "0") {
+      glob_led_cmd = 0;
+      Serial.println("Received LED = OFF");
       Serial.println(glob_led_cmd);
+      Serial.print(" ");
+    }
+    else if (msg == "ON" || msg == "1") {
+      glob_led_cmd = 1;
+      Serial.println("Received LED = ON");
+      Serial.println(glob_led_cmd);
+      Serial.print(" ");
+    }
+    else {
+      Serial.print("Invalid LED command: ");
+      Serial.println(msg);
       Serial.print(" ");
     }
   }
@@ -140,30 +143,53 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
   
   else if (t.endsWith("/" + String(FEED_FAN))) {
-    int fanCmd = msg.toInt();
+    msg.trim();
+    msg.toUpperCase();
 
-    if (fanCmd == 0) {
+    if (msg == "AUTO" || msg == "-1") {
+      glob_fan_cmd = -1;
+      Serial.println("Received FAN = AUTO");
+    }
+    else if (msg == "OFF" || msg == "0") {
       glob_fan_cmd = 0;
       Serial.println("Received FAN = OFF");
-      Serial.print(" ");
-    } else {
+    }
+    else if (msg == "ON" || msg == "1") {
       glob_fan_cmd = 1;
       Serial.println("Received FAN = ON");
-      Serial.print(" ");
+    }
+    else {
+      Serial.print("Invalid FAN command: ");
+      Serial.println(msg);
     }
   }
 
 
-    else if (t.endsWith("/" + String(FEED_MAYBOM))) {
-    int MaybomCmd = msg.toInt();
+  else if (t.endsWith("/" + String(FEED_MAYBOM))) {
+    msg.trim();
+    msg.toUpperCase();
 
-    if (MaybomCmd == 0) {
+    if (msg == "AUTO" || msg == "-1") {
+      glob_maybom_cmd = -1;
+      Serial.println("Received MAYBOM = AUTO");
+      Serial.println(glob_maybom_cmd);
+      Serial.print(" ");
+    }
+    else if (msg == "OFF" || msg == "0") {
       glob_maybom_cmd = 0;
       Serial.println("Received MAYBOM = OFF");
+      Serial.println(glob_maybom_cmd);
       Serial.print(" ");
-    } else {
+    }
+    else if (msg == "ON" || msg == "1") {
       glob_maybom_cmd = 1;
       Serial.println("Received MAYBOM = ON");
+      Serial.println(glob_maybom_cmd);
+      Serial.print(" ");
+    }
+    else {
+      Serial.print("Invalid MAYBOM command: ");
+      Serial.println(msg);
       Serial.print(" ");
     }
   }
